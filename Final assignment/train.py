@@ -58,17 +58,21 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 
 def get_args_parser():
 
-    parser = ArgumentParser("Training script for a PyTorch U-Net model")
+    parser = ArgumentParser("Training script for a PyTorch HRNet model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=64, help="Training batch size")
+    parser.add_argument("--batch-size", type=int, default=16, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.000125, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--experiment-id", type=str, default="unet-training", help="Experiment ID for Weights & Biases")
+    parser.add_argument("--experiment-id", type=str, default="HRNet_v1-training", help="Experiment ID for Weights & Biases")
 
     return parser
 
+#Poly Learning Rate Scheduler
+def lr_lambda(epoch):
+    # Standard Poly decay formula: (1-epoch/max_epochs)^0.9
+    return (1-epoch/args.epochs)**0.9
 
 def main(args):
     # Initialize wandb for logging
@@ -94,9 +98,11 @@ def main(args):
     # Define the transforms to apply to the data
     img_transform = Compose([
     ToImage(),
-    Resize((256, 256)),
+    #Resize((256, 256)),
+    Resize((512, 1024)),
     ToDtype(torch.float32, scale=True),
-    Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    #Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
     # Target transform (mask)
@@ -148,7 +154,14 @@ def main(args):
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr)
+    #optimizer = AdamW(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.SGD(
+            model.parameters(), 
+            lr=args.lr, 
+            momentum=0.9, 
+            weight_decay=1e-4
+        )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
     # Training loop
     best_valid_loss = float('inf')
@@ -177,6 +190,9 @@ def main(args):
                 "epoch": epoch + 1,
             }, step=epoch * len(train_dataloader) + i)
             
+        scheduler.step()
+        wandb.log({"learning_rate": optimizer.param_groups[0]['lr']}, step=epoch)
+
         # Validation
         model.eval()
         with torch.no_grad():

@@ -39,9 +39,12 @@ def preprocess(img: Image.Image) -> torch.Tensor:
     # Return a tensor suitable for model input
     transform = Compose([
         ToImage(),
-        Resize(size=(256, 256), interpolation=InterpolationMode.BILINEAR),
+        #Resize(size=(256, 256), interpolation=InterpolationMode.BILINEAR),
+        Resize(size=(512, 1024), interpolation=InterpolationMode.BILINEAR),
+
         ToDtype(dtype=torch.float32, scale=True),
-        Normalize(mean=(0.5,), std=(0.5,)),
+        #Normalize(mean=(0.5,), std=(0.5,)), # For standard U-Net use this
+        Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)), 
     ])
 
     img = transform(img)
