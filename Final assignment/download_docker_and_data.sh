@@ -6,10 +6,11 @@
 #SBATCH --partition=gpu_mig
 #SBATCH --time=3:00:00
 
+export $(grep -v '^#' .env | xargs)
 # Pull container from dockerhub
 apptainer pull container.sif docker://cclaess/5lsm0:v1
 
 # Use the huggingface-cli package inside the container to download the data
 mkdir -p data
-apptainer exec container.sif \
+apptainer exec --env HF_TOKEN=$HF_TOKEN container.sif \
     huggingface-cli download TimJaspersTue/5LSM0 --local-dir ./data --repo-type dataset
