@@ -20,8 +20,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir \
     torch torchvision --index-url https://download.pytorch.org/whl/cu126
 RUN pip install --no-cache-dir \
-    pillow
-RUN pip install --no-cache-dir \
+    pillow \
     timm \
     numpy \
     opencv-python \
@@ -30,6 +29,6 @@ RUN pip install --no-cache-dir \
 WORKDIR /app
 COPY predict.py /app/predict.py
 COPY model.py /app/model.py
-#COPY model.pt /app/model.pt
+COPY model.pt /app/model.pt
 
 ENTRYPOINT ["python", "/app/predict.py"]
