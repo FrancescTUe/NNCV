@@ -32,8 +32,10 @@ from torchvision.transforms.v2 import (
     RandomResizedCrop,
     RandomHorizontalFlip,
 )
-from torchmetrics.classification import MulticlassF1Score, MulticlassMeanIoU
 
+from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
+from torchvision import tv_tensors
+from torchvision.transforms import v2
 from model import Model
 
 
@@ -100,22 +102,22 @@ def main(args):
 
     # we initialize more metrics
     f1_metric = MulticlassF1Score(num_classes=19, average='macro', ignore_index=255).to(device)
-    miou_metric = MulticlassMeanIoU(num_classes=19, ignore_index=255).to(device)
+    miou_metric = MulticlassJaccardIndex(num_classes=19, ignore_index=255).to(device)
 
     # Define the transforms to apply to the data (training with data augmentation)
     train_transform = Compose([
-        ToImage(),
+      ToImage(),
         RandomResizedCrop(size=(256, 512), scale=(0.5, 2.0), antialias=True),
         RandomHorizontalFlip(p=0.5),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        ])  
+        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
 
     val_transform = Compose([
-        ToImage(),
+      ToImage(),
         Resize((256, 512), antialias=True),
         ToDtype(torch.float32, scale=True),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     # Target transform (mask)
