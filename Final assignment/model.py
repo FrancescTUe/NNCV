@@ -1,71 +1,23 @@
 import torch
 import torch.nn as nn
-import timm
+from torchvision.models.segmentation import deeplabv3_resnet50
 
 class Model(nn.Module):
-    """
-    High-Resolution Net (HRNet)
-    """
-    def __init__(
-        self, 
-        in_channels=3, 
-        n_classes=19,
-        pretrained=True
-    ):
-        """
-        Args:
-            in_channels (int): Number of input channels
-            n_classes (int): Number of output classes (19 for Cityscapes)
-        """
+    def __init__(self, n_classes=19, pretrained=True):
         super().__init__()
-        self.in_channels = in_channels
-
-        # Load HRNet-W18 backbone
-        self.backbone = timm.create_model(
-            'hrnet_w18', 
-            pretrained=pretrained, 
-            features_only=True, 
-            in_chans=in_channels
+        # Load a pretrained DeepLabV3+ with a ResNet-50 backbone
+        self.model = deeplabv3_resnet50(
+            weights='DEFAULT' if pretrained else None,
+            progress=True
         )
-
-        # HRNet features_only=True returns a list of feature maps from different resolutions.
-        # For HRNet-W18, the channels for the 4 parallel streams are 18, 36, 72, 144.
-        self.seg_head = nn.Sequential(
-            nn.Conv2d(18+36+72+144, 256, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, n_classes, kernel_size=1)
-        )
+        # Adjust the classifier head for 19 classes
+        self.model.classifier[4] = nn.Conv2d(512, n_classes, kernel_size=1)
+        # Adjust the auxiliary classifier if needed
+        self.model.aux_classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
 
     def forward(self, x):
-        """
-        Forward pass with multi-resolution feature fusion.
-        """
-        if x.shape[1] != self.in_channels:
-            raise ValueError(f"Expected {self.in_channels} input channels, but got {x.shape[1]}")
-
-        # Get features from the 4 parallel resolution streams
-        features = self.backbone(x) # [x_1/4, x_1/8, x_1/16, x_1/32]
-        
-        # Upsample all features to the highest resolution (1/4 of input)
-        target_size = features[0].shape[2:]
-        upsampled_features = [features[0]]
-        for i in range(1, len(features)):
-            upsampled_features.append(
-                torch.nn.functional.interpolate(features[i], size=target_size, mode='bilinear', align_corners=True))
-
-        # Concatenate features along the channel dimension
-        out = torch.cat(upsampled_features, dim=1)
-        
-        # Apply segmentation head
-        logits = self.seg_head(out)
-
-        # Final upsample to match original image input size
-        logits = torch.nn.functional.interpolate(
-            logits, size=x.shape[2:], mode='bilinear', align_corners=True
-        )
-
-        return logits
+        # DeepLabV3+ returns a dict with 'out' and 'aux'
+        return self.model(x)['out']
 
 
 

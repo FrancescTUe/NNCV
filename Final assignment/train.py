@@ -60,9 +60,9 @@ def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch HRNet model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--batch-size", type=int, default=16, help="Training batch size")
+    parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.00025, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.0003, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="HRNet_v1-training", help="Experiment ID for Weights & Biases")
@@ -150,17 +150,17 @@ def main(args):
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
 
-    # Define the loss function
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    # Define the loss function (we add now class weights)
+    cityscapes_weights = torch.tensor([
+        2.81, 6.71, 3.78, 9.94, 9.77, 9.41, 10.27, 9.47, 2.88, 
+        7.18, 3.85, 6.66, 9.59, 3.29, 9.55, 9.63, 9.63, 10.30, 9.55
+    ], dtype=torch.float32)
+    weights = cityscapes_weights.to(device)
+    criterion = nn.CrossEntropyLoss(weight=weights,ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
-    #optimizer = AdamW(model.parameters(), lr=args.lr)
-    optimizer = torch.optim.SGD(
-            model.parameters(), 
-            lr=args.lr, 
-            momentum=0.9, 
-            weight_decay=1e-4
-        )
+    optimizer = AdamW(model.parameters(), lr=args.lr)
+
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
     # Training loop

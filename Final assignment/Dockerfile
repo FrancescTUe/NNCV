@@ -24,7 +24,8 @@ RUN pip install --no-cache-dir \
     timm \
     numpy \
     opencv-python \
-    six
+    six \
+    wandb
 
 WORKDIR /app
 COPY predict.py /app/predict.py
