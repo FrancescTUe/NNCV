@@ -40,7 +40,7 @@ def preprocess(img: Image.Image) -> torch.Tensor:
     transform = Compose([
         ToImage(),
         #Resize(size=(256, 256), interpolation=InterpolationMode.BILINEAR),
-        Resize(size=(512, 1024), interpolation=InterpolationMode.BILINEAR),
+        Resize(size=(256, 512), interpolation=InterpolationMode.BILINEAR),
 
         ToDtype(dtype=torch.float32, scale=True),
         #Normalize(mean=(0.5,), std=(0.5,)), # For standard U-Net use this

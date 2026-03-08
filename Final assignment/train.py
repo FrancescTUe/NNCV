@@ -62,7 +62,7 @@ def get_args_parser():
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
     parser.add_argument("--batch-size", type=int, default=16, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.000125, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.00025, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="HRNet_v1-training", help="Experiment ID for Weights & Biases")
@@ -99,7 +99,7 @@ def main(args):
     img_transform = Compose([
     ToImage(),
     #Resize((256, 256)),
-    Resize((512, 1024)),
+    Resize((256, 512)),
     ToDtype(torch.float32, scale=True),
     #Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
@@ -108,7 +108,7 @@ def main(args):
     # Target transform (mask)
     target_transform = Compose([
         ToImage(),
-        Resize((256, 256), interpolation=InterpolationMode.NEAREST),
+        Resize((256, 512), interpolation=InterpolationMode.NEAREST),
         ToDtype(torch.int64),  # no scaling
     ])
 
