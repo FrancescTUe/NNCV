@@ -25,7 +25,8 @@ RUN pip install --no-cache-dir \
     numpy \
     opencv-python \
     six \
-    wandb
+    wandb \
+    torchmetrics
 
 WORKDIR /app
 COPY predict.py /app/predict.py
