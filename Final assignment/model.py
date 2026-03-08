@@ -11,7 +11,7 @@ class Model(nn.Module):
             progress=True
         )
         # Adjust the classifier head for 19 classes
-        self.model.classifier[4] = nn.Conv2d(512, n_classes, kernel_size=1)
+        self.model.classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
         # Adjust the auxiliary classifier if needed
         self.model.aux_classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
 
