@@ -252,9 +252,9 @@ def main(args):
             total_miou = miou_metric.compute()
 
             wandb.log({
-                "valid_loss": valid_loss
+                "valid_loss": valid_loss,
                 "val_f1": total_f1,
-                "val_mIoU": total_miou
+                "val_mIoU": total_miou,
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             if valid_loss < best_valid_loss:
