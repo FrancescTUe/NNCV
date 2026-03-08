@@ -105,19 +105,11 @@ def main(args):
     miou_metric = MulticlassJaccardIndex(num_classes=19, ignore_index=255).to(device)
 
     # Define the transforms to apply to the data (training with data augmentation)
-    train_transform = Compose([
-      ToImage(),
-        RandomResizedCrop(size=(256, 512), scale=(0.5, 2.0), antialias=True),
-        RandomHorizontalFlip(p=0.5),
-        ToDtype(torch.float32, scale=True),
-        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    val_transform = Compose([
-      ToImage(),
-        Resize((256, 512), antialias=True),
-        ToDtype(torch.float32, scale=True),
-        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    img_transform = Compose([
+    ToImage(),
+    Resize((256, 512)),
+    ToDtype(torch.float32, scale=True),
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     # Target transform (mask)
@@ -133,17 +125,17 @@ def main(args):
     split="train",
     mode="fine",
     target_type="semantic",
-    transforms=train_transform,
-    #target_transform=target_transform,
+    transform=img_transform,
+    target_transform=target_transform,
     )
 
     valid_dataset = Cityscapes(
-        args.data_dir,
-        split="val",
-        mode="fine",
-        target_type="semantic",
-        transforms=val_transform,
-        #target_transform=target_transform,
+    args.data_dir,
+    split="val",
+    mode="fine",
+    target_type="semantic",
+    transform=img_transform,
+    target_transform=target_transform,
     )
 
     train_dataloader = DataLoader(
