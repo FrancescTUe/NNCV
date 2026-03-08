@@ -28,8 +28,11 @@ from torchvision.transforms.v2 import (
     Resize,
     ToImage,
     ToDtype,
-    InterpolationMode
+    InterpolationMode,
+    RandomResizedCrop,
+    RandomHorizontalFlip,
 )
+from torchmetrics.classification import MulticlassF1Score, MulticlassMeanIoU
 
 from model import Model
 
@@ -61,8 +64,8 @@ def get_args_parser():
     parser = ArgumentParser("Training script for a PyTorch HRNet model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
     parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
-    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=0.0003, help="Learning rate")
+    parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers for data loaders")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--experiment-id", type=str, default="HRNet_v1-training", help="Experiment ID for Weights & Biases")
@@ -95,14 +98,24 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Define the transforms to apply to the data
-    img_transform = Compose([
-    ToImage(),
-    #Resize((256, 256)),
-    Resize((256, 512)),
-    ToDtype(torch.float32, scale=True),
-    #Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    # we initialize more metrics
+    f1_metric = MulticlassF1Score(num_classes=19, average='macro', ignore_index=255).to(device)
+    miou_metric = MulticlassMeanIoU(num_classes=19, ignore_index=255).to(device)
+
+    # Define the transforms to apply to the data (training with data augmentation)
+    train_transform = Compose([
+        ToImage(),
+        RandomResizedCrop(size=(256, 512), scale=(0.5, 2.0), antialias=True),
+        RandomHorizontalFlip(p=0.5),
+        ToDtype(torch.float32, scale=True),
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])  
+
+    val_transform = Compose([
+        ToImage(),
+        Resize((256, 512), antialias=True),
+        ToDtype(torch.float32, scale=True),
+        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
 
     # Target transform (mask)
@@ -118,8 +131,8 @@ def main(args):
     split="train",
     mode="fine",
     target_type="semantic",
-    transform=img_transform,
-    target_transform=target_transform,
+    transforms=train_transform,
+    #target_transform=target_transform,
     )
 
     valid_dataset = Cityscapes(
@@ -127,8 +140,8 @@ def main(args):
         split="val",
         mode="fine",
         target_type="semantic",
-        transform=img_transform,
-        target_transform=target_transform,
+        transforms=val_transform,
+        #target_transform=target_transform,
     )
 
     train_dataloader = DataLoader(
@@ -159,7 +172,7 @@ def main(args):
     criterion = nn.CrossEntropyLoss(weight=weights,ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr)
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
@@ -195,6 +208,8 @@ def main(args):
 
         # Validation
         model.eval()
+        f1_metric.reset()
+        miou_metric.reset()
         with torch.no_grad():
             losses = []
             for i, (images, labels) in enumerate(valid_dataloader):
@@ -207,9 +222,13 @@ def main(args):
                 outputs = model(images)
                 loss = criterion(outputs, labels)
                 losses.append(loss.item())
-            
+
+                predictions = outputs.softmax(1).argmax(1)
+                f1_metric.update(predictions, labels)
+                miou_metric.update(predictions, labels)
+
                 if i == 0:
-                    predictions = outputs.softmax(1).argmax(1)
+                    #predictions = outputs.softmax(1).argmax(1)
 
                     predictions = predictions.unsqueeze(1)
                     labels = labels.unsqueeze(1)
@@ -229,8 +248,13 @@ def main(args):
                     }, step=(epoch + 1) * len(train_dataloader) - 1)
             
             valid_loss = sum(losses) / len(losses)
+            total_f1 = f1_metric.compute()
+            total_miou = miou_metric.compute()
+
             wandb.log({
                 "valid_loss": valid_loss
+                "val_f1": total_f1,
+                "val_mIoU": total_miou
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             if valid_loss < best_valid_loss:
