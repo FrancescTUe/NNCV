@@ -74,10 +74,15 @@ def get_args_parser():
 
     return parser
 
-#Poly Learning Rate Scheduler
-def lr_lambda(epoch):
-    # Standard Poly decay formula: (1-epoch/max_epochs)^0.9
-    return (1-epoch/args.epochs)**0.9
+WARMUP_STEPS = 500 
+def get_lr_sched(step, total_steps, base_lr):
+    # Linear Warm-up
+    if step < WARMUP_STEPS:
+        return float(step) / float(max(1, WARMUP_STEPS))
+    # Poly Decay after warm-up
+    progress = (step - WARMUP_STEPS) / (total_steps - WARMUP_STEPS)
+    return (1.0 - progress) ** 0.9
+
 
 def main(args):
     # Initialize wandb for logging
@@ -166,13 +171,16 @@ def main(args):
     criterion = nn.CrossEntropyLoss(weight=weights,ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
-    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    total_steps = len(train_dataloader) * args.epochs
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+                       lr=args.lr, weight_decay=0.05)
 
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr)
 
     # Training loop
     best_valid_loss = float('inf')
     current_best_model_path = None
+    count_ep = 0 # counter for early stopping
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1:04}/{args.epochs:04}")
 
@@ -190,14 +198,15 @@ def main(args):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            scheduler.step()
+
+            global_step = epoch*len(train_dataloader)+i
 
             wandb.log({
                 "train_loss": loss.item(),
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch + 1,
-            }, step=epoch * len(train_dataloader) + i)
-            
-        scheduler.step()
+            }, step=global_step)
         wandb.log({"learning_rate": optimizer.param_groups[0]['lr']}, step=epoch)
 
         # Validation
@@ -252,6 +261,7 @@ def main(args):
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             if valid_loss < best_valid_loss:
+                count_ep = 0
                 best_valid_loss = valid_loss
                 if current_best_model_path:
                     os.remove(current_best_model_path)
@@ -260,7 +270,12 @@ def main(args):
                     f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
                 )
                 torch.save(model.state_dict(), current_best_model_path)
-        
+
+            else:
+                count_ep+=1
+        if count_ep == 10: # 10 epochs w/o doing anything
+            print("Early stopping")
+            break
     print("Training complete!")
 
     # Save the model
