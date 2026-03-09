@@ -11,8 +11,8 @@ class Model(nn.Module):
             progress=True
         )
 
-        for param in self.model.parameters():
-            param.requires_grad = False
+       # for param in self.model.parameters():
+        #    param.requires_grad = False
 
         # Adjust the classifier head for 19 classes
         self.model.classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
