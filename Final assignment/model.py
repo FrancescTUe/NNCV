@@ -11,8 +11,27 @@ class Model(nn.Module):
             progress=True
         )
 
-       # for param in self.model.parameters():
-        #    param.requires_grad = False
+       	for param in self.model.parameters():
+            param.requires_grad = False
+
+       # 2. Unfreeze the second half of the backbone
+        # ResNet-50 has: conv1, bn1, relu, maxpool, layer1, layer2, layer3, layer4
+        # We will unfreeze from 'layer3' onwards to train high-level features.
+        unfreeze_started = False
+        for name, child in self.model.backbone.named_children():
+            if name == "layer3": 
+                unfreeze_started = True
+            
+            if unfreeze_started:
+                for param in child.parameters():
+                    param.requires_grad = True
+
+        # 3. Unfreeze the entire DeepLabV3 heads (ASPP + Classifier)
+        # This replaces your specific 'classifier[0].project' code
+        for param in self.model.classifier.parameters():
+            param.requires_grad = True
+        for param in self.model.aux_classifier.parameters():
+            param.requires_grad = True
 
         # Adjust the classifier head for 19 classes
         self.model.classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)

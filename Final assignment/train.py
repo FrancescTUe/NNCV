@@ -74,7 +74,7 @@ def get_args_parser():
 
     return parser
 
-WARMUP_STEPS = 500 
+WARMUP_STEPS = 1000 
 def get_lr_sched(step, total_steps, base_lr):
     # Linear Warm-up
     if step < WARMUP_STEPS:
@@ -175,7 +175,7 @@ def main(args):
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
                        lr=args.lr, weight_decay=0.05)
 
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr))
 
     # Training loop
     best_valid_loss = float('inf')
