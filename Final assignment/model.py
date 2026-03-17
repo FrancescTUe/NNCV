@@ -1,22 +1,21 @@
 import torch
 import torch.nn as nn
-from torchvision.models.segmentation import deeplabv3_resnet50
+from torchvision.models.segmentation import deeplabv3_resnet50, deeplabv3_mobilenet_v3_large
 
 class Model(nn.Module):
-    def __init__(self, in_channels=3, n_classes=19, pretrained=True):
+    def __init__(self, in_channels=3, n_classes=19, pretrained=False):
         super().__init__()
         # Load a pretrained DeepLabV3+ with a ResNet-50 backbone
+        weights = 'DEFAULT' if pretrained else None
         self.model = deeplabv3_resnet50(
-            weights='DEFAULT' if pretrained else None,
-            progress=True
+            weights= weights,
+            progress=True,
+            aux_loss=True
         )
 
-       	for param in self.model.parameters():
+        for param in self.model.parameters():
             param.requires_grad = False
 
-       # 2. Unfreeze the second half of the backbone
-        # ResNet-50 has: conv1, bn1, relu, maxpool, layer1, layer2, layer3, layer4
-        # We will unfreeze from 'layer3' onwards to train high-level features.
         unfreeze_started = False
         for name, child in self.model.backbone.named_children():
             if name == "layer3": 
@@ -26,8 +25,7 @@ class Model(nn.Module):
                 for param in child.parameters():
                     param.requires_grad = True
 
-        # 3. Unfreeze the entire DeepLabV3 heads (ASPP + Classifier)
-        # This replaces your specific 'classifier[0].project' code
+
         for param in self.model.classifier.parameters():
             param.requires_grad = True
         for param in self.model.aux_classifier.parameters():
@@ -42,7 +40,17 @@ class Model(nn.Module):
         # DeepLabV3+ returns a dict with 'out' and 'aux'
         return self.model(x)['out']
 
+class StudentModel(nn.Module):
+    def __init__(self, n_classes=19):
+        super().__init__()
+        # MobileNetV3 --> Efficiency benchmark
+        self.model = deeplabv3_mobilenet_v3_large(
+            weights=None, 
+            num_classes=n_classes
+        )
 
+    def forward(self, x):
+        return self.model(x)['out']
 
 class U_Net_Model(nn.Module):
     """ 

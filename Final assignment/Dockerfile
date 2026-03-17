@@ -21,12 +21,12 @@ RUN pip install --no-cache-dir \
     torch torchvision --index-url https://download.pytorch.org/whl/cu126
 RUN pip install --no-cache-dir \
     pillow \
-    timm \
     numpy \
     opencv-python \
     six \
     wandb \
-    torchmetrics
+    torchmetrics \
+    ptflops
 
 WORKDIR /app
 COPY predict.py /app/predict.py
