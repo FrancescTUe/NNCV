@@ -103,6 +103,7 @@ def get_lr_sched(step, total_steps, base_lr):
     return (1.0 - progress) ** 0.9
 
 def flow_matching_loss(flow_head, x1):
+    loss_fn = nn.MSELoss()
     # x0 is normal noise 
     x0 = torch.randn_like(x1)
     
@@ -119,7 +120,7 @@ def flow_matching_loss(flow_head, x1):
     predicted_velocity = flow_head(t, xt)
     
     # MSE Loss between velocities
-    return F.mse_loss(predicted_velocity, target_velocity)
+    return loss_fn(predicted_velocity, target_velocity)
 
 def main(args):
     # Initialize wandb for logging
@@ -149,7 +150,7 @@ def main(args):
     # Define the transforms to apply to the data (training with data augmentation)
     img_transform = Compose([
     ToImage(),
-    Resize((256, 512)),
+    Resize((224, 448)),
     ToDtype(torch.float32, scale=True),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -157,7 +158,7 @@ def main(args):
     # Target transform (mask)
     target_transform = Compose([
         ToImage(),
-        Resize((256, 512), interpolation=InterpolationMode.NEAREST),
+        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
         ToDtype(torch.int64),  # no scaling
     ])
 
@@ -206,21 +207,9 @@ def main(args):
         num_workers=args.num_workers
     )
 
-    # Load teacher model
-    teacher_model = Model(pretrained=False)
-    state_dict = torch.load(
-        'teacher_model.pt', 
-        map_location=device,
-        weights_only=True,
-    )
-    teacher_model.load_state_dict(
-        state_dict, 
-        strict=True,  # Ensure the state dict matches the model architecture
-    )
-    ood_model = FM_OODModel(teacher_model).to(device)
+    ood_model = FM_OODModel().to(device)
 
     # Define the optimizer
-    total_steps = len(train_dataloader) * args.epochs
     optimizer = AdamW(filter(lambda p: p.requires_grad, ood_model.flow_head.parameters()),
                        lr=args.lr, weight_decay=0.05)
 

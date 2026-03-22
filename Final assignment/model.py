@@ -68,54 +68,23 @@ class VelocityNet(nn.Module):
         return self.net(tx)
 
 class FM_OODModel(nn.Module):
-    def __init__(self, baseline_model):
+    def __init__(self):
         super().__init__()
-        self.encoder = baseline_model.model.backbone
-        self.classifier = baseline_model.model.classifier
-        
+        self.encoder = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')        
         # we freeze the encoder  
         for param in self.encoder.parameters():
             param.requires_grad = False
             
-        self.flow_head = VelocityNet(input_dim=3072) 
-
-    def get_combined_features(self, x):
-        """ Helper to extract and combine layer3 and final features correctly """
-        # Initial ResNet blocks: conv1 -> bn1 -> relu -> maxpool
-        x = self.encoder.conv1(x)
-        x = self.encoder.bn1(x)
-        x = self.encoder.relu(x)
-        x = self.encoder.maxpool(x)
-
-        # ResNet Layers
-        x = self.encoder.layer1(x)
-        x = self.encoder.layer2(x)
-        
-        # Layer 3 (1024 channels) - Intermediate features
-        feat_l3 = self.encoder.layer3(x) 
-        
-        # Layer 4 (2048 channels) - Final features
-        feat_l4 = self.encoder.layer4(feat_l3)
-        
-        # Global Average Pool both to 1D vectors
-        v3 = torch.mean(feat_l3, dim=(2, 3)) # [Batch, 1024]
-        v4 = torch.mean(feat_l4, dim=(2, 3)) # [Batch, 2048]
-        latent = torch.cat([v3, v4], dim=1)
-
-        latent = F.normalize(latent, p=2, dim=1)
-        return latent, feat_l4
+        self.flow_head = VelocityNet(input_dim=384) 
 
     def forward(self, x, return_ood_score=False):
-        # we obtain the features and segmentation from baseline model
-        latent, features_final = self.get_combined_features(x)
-        seg_output = self.classifier(features_final)
-
-        if not return_ood_score:
-            return seg_output
+        # we obtain the features from the ViT
+        features = self.encoder(x)
+        latent = F.normalize(features, p=2, dim=1)
         
         ood_score = self.compute_log_likelihood(latent)
         
-        return seg_output, ood_score
+        return ood_score
     
     def compute_log_likelihood(self, z, steps=5):
             total_error = 0
