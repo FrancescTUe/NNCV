@@ -21,7 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchvision.datasets import Cityscapes, CocoDetection
+from torchvision.datasets import Cityscapes
 from torchvision.utils import make_grid
 from torchvision.transforms.v2 import (
     Compose,
@@ -67,7 +67,6 @@ def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch HRNet model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--ood-data-dir", type=str, default="./coco", help="Path to COCO for OOD validation")
     parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
@@ -92,25 +91,18 @@ def get_lr_sched(step, total_steps, base_lr):
 def get_temperature (epoch, total_epochs, start_t = 3, final_t = 1):
     T = start_t - (start_t-final_t)*(epoch/total_epochs)
     return T
+    
 
-def flow_matching_loss(flow_head, x1):
-    # x0 is normal noise 
-    x0 = torch.randn_like(x1)
+def distillation_loss(student_logits, teacher_logits, labels, T=1.0, alpha=0.7):
+    # crossentropy
+    soft_targets = F.softmax(teacher_logits/T, dim=1)
+    log_probs = F.log_softmax(student_logits/T, dim=1)
+    # KL divergence 
+    kl_div = F.kl_div(log_probs, soft_targets, reduction='batchmean')*(T**2)
+    # combine loss
+    student_ce_loss = F.cross_entropy(student_logits, labels, ignore_index=255)
     
-    # we sample a random time t between 0 and 1
-    t = torch.rand(x1.shape[0], 1, device=x1.device)
-    
-    # linear interpolation: x_t = t*x1 + (1-t)*x0
-    xt = t*x1 + (1-t)*x0
-    
-    # we compute the target velocity
-    target_velocity = x1 - x0
-    
-    # we predict the velocity
-    predicted_velocity = flow_head(t, xt)
-    
-    # MSE Loss between velocities
-    return F.mse_loss(predicted_velocity, target_velocity)
+    return alpha*kl_div + (1-alpha)*student_ce_loss
 
 def main(args):
     # Initialize wandb for logging
@@ -171,13 +163,6 @@ def main(args):
     target_transform=target_transform,
     )
 
-    # COCO Validation (Far-OOD)
-    ood_valid_dataset = CocoDetection(
-        root=os.path.join(args.ood_data_dir, "val2017"),
-        annFile=os.path.join(args.ood_data_dir, "annotations", "instances_val2017.json"),
-        transform=img_transform
-    )
-
     train_dataloader = DataLoader(
         train_dataset, 
         batch_size=args.batch_size, 
@@ -186,13 +171,6 @@ def main(args):
     )
     valid_dataloader = DataLoader(
         valid_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=False,
-        num_workers=args.num_workers
-    )
-
-    ood_valid_dataloader = DataLoader(
-        ood_valid_dataset, 
         batch_size=args.batch_size, 
         shuffle=False,
         num_workers=args.num_workers

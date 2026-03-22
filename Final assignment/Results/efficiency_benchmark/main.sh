@@ -3,10 +3,9 @@ wandb login
 
 python3 train.py \
     --data-dir ./data/cityscapes \
-    --ood-data-dir ./coco \
-    --batch-size 64 \
+    --batch-size 32 \
     --epochs 60 \
     --lr 0.0005 \
     --num-workers 10 \
     --seed 42 \
-    --experiment-id "OOD_v1" \
+    --experiment-id "Efficiency_v4" \

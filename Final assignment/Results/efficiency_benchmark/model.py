@@ -40,54 +40,6 @@ class Model(nn.Module):
         # DeepLabV3+ returns a dict with 'out' and 'aux'
         return self.model(x)['out']
 
-class VelocityNet(nn.Module):
-    def __init__(self, input_dim=256):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim + 1, 512), # +1 for time 't'
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, input_dim)
-        )
-
-    def forward(self, t, x):
-        # x is the feature vector, t is the time step [0, 1]
-        t_stack = torch.full((x.shape[0], 1), t, device=x.device)
-        tx = torch.cat([x, t_stack], dim=1)
-        return self.net(tx)
-
-class FM_OODModel(nn.Module):
-    def __init__(self, baseline_model):
-        super().__init__()
-        self.encoder = baseline_model.model.backbone
-        self.classifier = baseline_model.model.classifier
-        
-        # we freeze the encoder  
-        for param in self.encoder.parameters():
-            param.requires_grad = False
-            
-        self.flow_head = VelocityNet(input_dim=2048) 
-
-    def forward(self, x, return_ood_score=False):
-        # we obtain the features and segmentation from baseline model
-        features = self.encoder(x)['out']
-        seg_output = self.classifier(features)
-        
-        if not return_ood_score:
-            return seg_output
-        
-        # pool features to a 1D vector
-        latent = torch.mean(features, dim=(2, 3)) 
-        
-        # we check the norm of the predicted velocity. High velocity indicates OOD data
-        with torch.no_grad():
-            t_zero = torch.zeros(1, device=x.device)
-            velocity = self.flow_head(t_zero, latent)
-            ood_score = torch.norm(velocity, p=2, dim=1)
-        
-        return seg_output, ood_score
-
 class StudentModel(nn.Module):
     def __init__(self, n_classes=19):
         super().__init__()
