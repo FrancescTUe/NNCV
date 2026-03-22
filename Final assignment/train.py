@@ -35,7 +35,7 @@ from torchvision.transforms.v2 import (
 from ptflops import get_model_complexity_info
 
 from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
-from model import Model, StudentModel
+from model import Model, FM_OODModel
 
 
 # Mapping class IDs to train IDs
@@ -101,10 +101,6 @@ def get_lr_sched(step, total_steps, base_lr):
     # Poly Decay after warm-up
     progress = (step - WARMUP_STEPS) / (total_steps - WARMUP_STEPS)
     return (1.0 - progress) ** 0.9
-
-def get_temperature (epoch, total_epochs, start_t = 3, final_t = 1):
-    T = start_t - (start_t-final_t)*(epoch/total_epochs)
-    return T
 
 def flow_matching_loss(flow_head, x1):
     # x0 is normal noise 
@@ -221,65 +217,34 @@ def main(args):
         state_dict, 
         strict=True,  # Ensure the state dict matches the model architecture
     )
-
-    print(f"Teacher Parameters: {count_parameters(teacher_model):,}")
-
-    teacher_model.eval().to(device)
-
-    # Define the model
-    student_model = StudentModel( 
-        n_classes=19,  # 19 classes in the Cityscapes dataset
-        ).to(device)
-    print(f"Student Parameters: {count_parameters(student_model):,}")
-
-    # Define the loss function (we add now class weights)
-    cityscapes_weights = torch.tensor([
-        2.81, 6.71, 3.78, 9.94, 9.77, 9.41, 10.27, 9.47, 2.88, 
-        7.18, 3.85, 6.66, 9.59, 3.29, 9.55, 9.63, 9.63, 10.30, 9.55
-    ], dtype=torch.float32)
-    weights = cityscapes_weights.to(device)
-    #criterion = nn.CrossEntropyLoss(weight=weights,ignore_index=255)  # Ignore the void class
-    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
+    ood_model = FM_OODModel(teacher_model).to(device)
 
     # Define the optimizer
     total_steps = len(train_dataloader) * args.epochs
-    optimizer = AdamW(filter(lambda p: p.requires_grad, student_model.parameters()),
+    optimizer = AdamW(filter(lambda p: p.requires_grad, ood_model.flow_head.parameters()),
                        lr=args.lr, weight_decay=0.05)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr))
 
-    #Compute FLOPs 
-    input_res = (3, 256, 512)
-
-    with torch.cuda.device(0) if torch.cuda.is_available() else torch.cpu():
-        t_macs, t_params = get_model_complexity_info(teacher_model, input_res, as_strings=True, print_per_layer_stat=False)
-        s_macs, s_params = get_model_complexity_info(student_model, input_res, as_strings=True, print_per_layer_stat=False)
-
-    print(f"Teacher Complexity: {t_macs} MACs")
-    print(f"Student Complexity: {s_macs} MACs")
-
     # Training loop
-    best_valid_loss = float('inf')
+    best_separation_ratio = 0
     current_best_model_path = None
     count_ep = 0 # counter for early stopping
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1:04}/{args.epochs:04}")
-        T = get_temperature (epoch, args.epochs)
-
         # Training
-        student_model.train()
+        ood_model.train()
         for i, (images, labels) in enumerate(train_dataloader):
-
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
 
             labels = labels.long().squeeze(1)  # Remove channel dimension
             with torch.no_grad():
-                teacher_outputs = teacher_model(images)
+                    features = ood_model.encoder(images)['out']
+                    latent = torch.mean(features, dim=(2, 3))
 
             optimizer.zero_grad()
-            outputs = student_model(images)
-            loss = distillation_loss(outputs, teacher_outputs, labels, T=T)
+            loss = flow_matching_loss(ood_model.flow_head, latent)
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -294,66 +259,37 @@ def main(args):
         wandb.log({"learning_rate": optimizer.param_groups[0]['lr']}, step=epoch)
 
         # Validation
-        student_model.eval()
-        f1_metric.reset()
-        miou_metric.reset()
+        ood_model.eval()
+        cityscapes_scores = []
+        coco_scores = []
         with torch.no_grad():
-            losses = []
-            for i, (images, labels) in enumerate(valid_dataloader):
+            # we evaluate the cityscapes dataset
+            for images, _ in valid_dataloader:
+                _, ood_score = ood_model(images.to(device), return_ood_score=True)
+                cityscapes_scores.extend(ood_score.cpu().tolist())
 
-                labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
-                images, labels = images.to(device), labels.to(device)
+            #we evaluate the COCO dataset
+            for images, _ in ood_valid_dataloader:
+                    _, ood_score = ood_model(images.to(device), return_ood_score=True)
+                    coco_scores.extend(ood_score.cpu().tolist())
 
-                labels = labels.long().squeeze(1)  # Remove channel dimension
-
-                outputs = student_model(images)
-                loss = criterion(outputs, labels)
-                losses.append(loss.item())
-
-                predictions = outputs.softmax(1).argmax(1)
-                f1_metric.update(predictions, labels)
-                miou_metric.update(predictions, labels)
-
-                if i == 0:
-                    #predictions = outputs.softmax(1).argmax(1)
-
-                    predictions = predictions.unsqueeze(1)
-                    labels = labels.unsqueeze(1)
-
-                    predictions = convert_train_id_to_color(predictions)
-                    labels = convert_train_id_to_color(labels)
-
-                    predictions_img = make_grid(predictions.cpu(), nrow=8)
-                    labels_img = make_grid(labels.cpu(), nrow=8)
-
-                    predictions_img = predictions_img.permute(1, 2, 0).numpy()
-                    labels_img = labels_img.permute(1, 2, 0).numpy()
-
-                    wandb.log({
-                        "predictions": [wandb.Image(predictions_img)],
-                        "labels": [wandb.Image(labels_img)],
-                    }, step=(epoch + 1) * len(train_dataloader) - 1)
-            
-            valid_loss = sum(losses) / len(losses)
-            total_f1 = f1_metric.compute()
-            total_miou = miou_metric.compute()
-
+            separation_ratio = (sum(coco_scores) / len(coco_scores)) / (sum(cityscapes_scores) / len(cityscapes_scores))
             wandb.log({
-                "valid_loss": valid_loss,
-                "val_f1": total_f1,
-                "val_mIoU": total_miou,
+                "avg_id_score": sum(cityscapes_scores) / len(cityscapes_scores),
+                "avg_ood_score": sum(coco_scores) / len(coco_scores),
+                "separation_ratio": separation_ratio
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
-            if valid_loss < best_valid_loss:
+            if separation_ratio < best_separation_ratio:
                 count_ep = 0
-                best_valid_loss = valid_loss
+                best_separation_ratio = separation_ratio
                 if current_best_model_path:
                     os.remove(current_best_model_path)
                 current_best_model_path = os.path.join(
                     output_dir, 
-                    f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
+                    f"best_model-epoch={epoch:04}-sep_rat={separation_ratio:04}.pt"
                 )
-                torch.save(student_model.state_dict(), current_best_model_path)
+                torch.save(ood_model.flow_head.state_dict(), current_best_model_path)
 
             else:
                 count_ep+=1
@@ -364,10 +300,10 @@ def main(args):
 
     # Save the model
     torch.save(
-        student_model.state_dict(),
+        ood_model.flow_head.state_dict(),
         os.path.join(
             output_dir,
-            f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
+            f"final_model-epoch={epoch:04}-sep_rat={separation_ratio:04}.pt"
         )
     )
     wandb.finish()
