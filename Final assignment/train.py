@@ -224,7 +224,7 @@ def main(args):
     optimizer = AdamW(filter(lambda p: p.requires_grad, ood_model.flow_head.parameters()),
                        lr=args.lr, weight_decay=0.05)
 
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr))
+    #scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr))
 
     # Training loop
     best_separation_ratio = 0
@@ -247,7 +247,7 @@ def main(args):
             loss = flow_matching_loss(ood_model.flow_head, latent)
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            #scheduler.step()
 
             global_step = epoch*len(train_dataloader)+i
 

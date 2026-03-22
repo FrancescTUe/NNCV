@@ -41,14 +41,18 @@ class Model(nn.Module):
         return self.model(x)['out']
 
 class VelocityNet(nn.Module):
-    def __init__(self, input_dim=256):
+    def __init__(self, input_dim=3072):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim + 1, 512), # +1 for time 't'
+            nn.Linear(input_dim + 1, 1024), # +1 for time 't'
+            nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(512, 512),
+
+            nn.Linear(1024, 1024),
+            nn.BatchNorm1d(1024),
             nn.ReLU(),
-            nn.Linear(512, input_dim)
+
+            nn.Linear(1024, input_dim)
         )
 
     def forward(self, t, x):
@@ -72,26 +76,39 @@ class FM_OODModel(nn.Module):
         for param in self.encoder.parameters():
             param.requires_grad = False
             
-        self.flow_head = VelocityNet(input_dim=2048) 
+        self.flow_head = VelocityNet(input_dim=3072) 
 
     def forward(self, x, return_ood_score=False):
         # we obtain the features and segmentation from baseline model
-        features = self.encoder(x)['out']
-        seg_output = self.classifier(features)
+        features_l3 = self.encoder.layer3(self.encoder.layer2(self.encoder.layer1(self.encoder.conv1(x))))
+        features_final = self.backbone(x)['out']
+        seg_output = self.classifier(features_final)
         
         if not return_ood_score:
             return seg_output
         
         # pool features to a 1D vector
-        latent = torch.mean(features, dim=(2, 3)) 
+        l3_vec = torch.mean(features_l3, dim=(2, 3))
+        final_vec = torch.mean(features_final, dim=(2, 3))
+        latent = torch.cat([l3_vec, final_vec], dim=1) 
         
-        # we check the norm of the predicted velocity. High velocity indicates OOD data
-        with torch.no_grad():
-            t_zero = torch.zeros(1, device=x.device)
-            velocity = self.flow_head(t_zero, latent)
-            ood_score = torch.norm(velocity, p=2, dim=1)
+        ood_score = self.compute_log_likelihood(latent)
         
         return seg_output, ood_score
+    
+    def compute_log_likelihood(self, z, steps=5):
+            total_error = 0
+            for i in range(steps):
+                t = torch.rand(z.shape[0], 1, device=z.device)
+                x0 = torch.randn_like(z)
+                xt = (1-t)*x0 + t*z  # Probability path
+                target_v = z-x0
+                
+                pred_v = self.flow_head(t, xt)
+                total_error += torch.norm(pred_v-target_v, p=2, dim=1)
+                
+            return total_error / steps
+
 
 class StudentModel(nn.Module):
     def __init__(self, n_classes=19):
