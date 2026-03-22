@@ -19,9 +19,10 @@ import wandb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
 from torch.optim import AdamW
-from torch.utils.data import DataLoader
-from torchvision.datasets import Cityscapes, ImageFolder
+from torch.utils.data import DataLoader, Dataset
+from torchvision.datasets import Cityscapes
 from torchvision.utils import make_grid
 from torchvision.transforms.v2 import (
     Compose,
@@ -30,14 +31,10 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
     InterpolationMode,
-    RandomResizedCrop,
-    RandomHorizontalFlip,
 )
 from ptflops import get_model_complexity_info
 
 from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
-from torchvision import tv_tensors
-from torchvision.transforms import v2
 from model import Model, StudentModel
 
 
@@ -62,7 +59,23 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 
     return color_image
 
+class ImageDataset(Dataset):
+    def __init__(self, root, transform=None):
+        self.root = root
+        self.transform = transform
+        # we list all image files
+        self.images = [f for f in os.listdir(root) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = os.path.join(self.root, self.images[index])
+        img = Image.open(img_path).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
+        return img, 0  
+    
 def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch HRNet model")
@@ -172,7 +185,7 @@ def main(args):
     )
 
     # COCO Validation (Far-OOD)
-    ood_valid_dataset = ImageFolder(
+    ood_valid_dataset = ImageDataset(
         root=os.path.join(args.ood_data_dir, "val2017"),
         transform=img_transform
     )
