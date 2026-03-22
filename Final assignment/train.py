@@ -227,9 +227,8 @@ def main(args):
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
 
-            labels = labels.long().squeeze(1)  # Remove channel dimension
-            with torch.no_grad():
-                latent, _ = ood_model.get_combined_features(images)
+            features = ood_model.encoder(images) 
+            latent = F.normalize(features, p=2, dim=1)
 
             optimizer.zero_grad()
             loss = flow_matching_loss(ood_model.flow_head, latent)
