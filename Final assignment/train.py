@@ -240,8 +240,7 @@ def main(args):
 
             labels = labels.long().squeeze(1)  # Remove channel dimension
             with torch.no_grad():
-                    features = ood_model.encoder(images)['out']
-                    latent = torch.mean(features, dim=(2, 3))
+                latent, _ = ood_model.get_combined_features(images)
 
             optimizer.zero_grad()
             loss = flow_matching_loss(ood_model.flow_head, latent)

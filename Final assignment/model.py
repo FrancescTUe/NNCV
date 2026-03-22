@@ -78,19 +78,37 @@ class FM_OODModel(nn.Module):
             
         self.flow_head = VelocityNet(input_dim=3072) 
 
+    def get_combined_features(self, x):
+        """ Helper to extract and combine layer3 and final features correctly """
+        # Initial ResNet blocks: conv1 -> bn1 -> relu -> maxpool
+        x = self.encoder.conv1(x)
+        x = self.encoder.bn1(x)
+        x = self.encoder.relu(x)
+        x = self.encoder.maxpool(x)
+
+        # ResNet Layers
+        x = self.encoder.layer1(x)
+        x = self.encoder.layer2(x)
+        
+        # Layer 3 (1024 channels) - Intermediate features
+        feat_l3 = self.encoder.layer3(x) 
+        
+        # Layer 4 (2048 channels) - Final features
+        feat_l4 = self.encoder.layer4(feat_l3)
+        
+        # Global Average Pool both to 1D vectors
+        v3 = torch.mean(feat_l3, dim=(2, 3)) # [Batch, 1024]
+        v4 = torch.mean(feat_l4, dim=(2, 3)) # [Batch, 2048]
+        
+        return torch.cat([v3, v4], dim=1), feat_l4
+
     def forward(self, x, return_ood_score=False):
         # we obtain the features and segmentation from baseline model
-        features_l3 = self.encoder.layer3(self.encoder.layer2(self.encoder.layer1(self.encoder.conv1(x))))
-        features_final = self.backbone(x)['out']
+        latent, features_final = self.get_combined_features(x)
         seg_output = self.classifier(features_final)
-        
+
         if not return_ood_score:
             return seg_output
-        
-        # pool features to a 1D vector
-        l3_vec = torch.mean(features_l3, dim=(2, 3))
-        final_vec = torch.mean(features_final, dim=(2, 3))
-        latent = torch.cat([l3_vec, final_vec], dim=1) 
         
         ood_score = self.compute_log_likelihood(latent)
         
