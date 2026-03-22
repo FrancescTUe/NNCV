@@ -53,8 +53,13 @@ class VelocityNet(nn.Module):
 
     def forward(self, t, x):
         # x is the feature vector, t is the time step [0, 1]
-        t_stack = torch.full((x.shape[0], 1), t.item() if torch.is_tensor(t) else t, device=x.device)
-        tx = torch.cat([x, t_stack], dim=1)
+        if t.dim() == 1:
+            t = t.unsqueeze(1)
+
+        if t.shape[0] != x.shape[0]:
+            t = t.expand(x.shape[0], 1)
+
+        tx = torch.cat([x, t], dim=1)
         return self.net(tx)
 
 class FM_OODModel(nn.Module):

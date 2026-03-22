@@ -280,7 +280,7 @@ def main(args):
                 "separation_ratio": separation_ratio
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
-            if separation_ratio < best_separation_ratio:
+            if separation_ratio > best_separation_ratio:
                 count_ep = 0
                 best_separation_ratio = separation_ratio
                 if current_best_model_path:
