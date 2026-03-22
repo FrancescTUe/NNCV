@@ -41,31 +41,48 @@ class Model(nn.Module):
         # DeepLabV3+ returns a dict with 'out' and 'aux'
         return self.model(x)['out']
 
+class ResidualBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.BatchNorm1d(dim),
+            nn.ReLU(),
+            nn.Dropout(0.1) # Prevents overfitting to Cityscapes noise
+        )
+
+    def forward(self, x):
+        return x + self.block(x) # Skip connection
+
 class VelocityNet(nn.Module):
     def __init__(self, input_dim=3072):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim + 1, 1024), # +1 for time 't'
+        # Initial projection
+        self.input_proj = nn.Sequential(
+            nn.Linear(input_dim + 1, 1024),
             nn.BatchNorm1d(1024),
-            nn.ReLU(),
-
-            nn.Linear(1024, 1024),
-            nn.BatchNorm1d(1024),
-            nn.ReLU(),
-
-            nn.Linear(1024, input_dim)
+            nn.ReLU()
         )
+        
+        # Stacked residual blocks for deeper reasoning
+        self.res_blocks = nn.Sequential(
+            ResidualBlock(1024),
+            ResidualBlock(1024)
+        )
+        
+        # Final projection back to feature space
+        self.output_proj = nn.Linear(1024, input_dim)
 
     def forward(self, t, x):
-        # x is the feature vector, t is the time step [0, 1]
         if t.dim() == 1:
             t = t.unsqueeze(1)
-
         if t.shape[0] != x.shape[0]:
             t = t.expand(x.shape[0], 1)
 
         tx = torch.cat([x, t], dim=1)
-        return self.net(tx)
+        x = self.input_proj(tx)
+        x = self.res_blocks(x)
+        return self.output_proj(x)
 
 class FM_OODModel(nn.Module):
     def __init__(self):
