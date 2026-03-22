@@ -100,10 +100,10 @@ class FM_OODModel(nn.Module):
         # Global Average Pool both to 1D vectors
         v3 = torch.mean(feat_l3, dim=(2, 3)) # [Batch, 1024]
         v4 = torch.mean(feat_l4, dim=(2, 3)) # [Batch, 2048]
-        latent = torch.cat([v3, v4], dim=1), feat_l4
+        latent = torch.cat([v3, v4], dim=1)
 
         latent = F.normalize(latent, p=2, dim=1)
-        return latent
+        return latent, feat_l4
 
     def forward(self, x, return_ood_score=False):
         # we obtain the features and segmentation from baseline model
