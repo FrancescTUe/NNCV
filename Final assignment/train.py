@@ -21,7 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchvision.datasets import Cityscapes, CocoDetection
+from torchvision.datasets import Cityscapes, ImageFolder
 from torchvision.utils import make_grid
 from torchvision.transforms.v2 import (
     Compose,
@@ -172,9 +172,8 @@ def main(args):
     )
 
     # COCO Validation (Far-OOD)
-    ood_valid_dataset = CocoDetection(
+    ood_valid_dataset = ImageFolder(
         root=os.path.join(args.ood_data_dir, "val2017"),
-        annFile=os.path.join(args.ood_data_dir, "annotations", "instances_val2017.json"),
         transform=img_transform
     )
 
