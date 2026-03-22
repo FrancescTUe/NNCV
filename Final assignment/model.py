@@ -53,7 +53,7 @@ class VelocityNet(nn.Module):
 
     def forward(self, t, x):
         # x is the feature vector, t is the time step [0, 1]
-        t_stack = torch.full((x.shape[0], 1), t, device=x.device)
+        t_stack = torch.full((x.shape[0], 1), t.item() if torch.is_tensor(t) else t, device=x.device)
         tx = torch.cat([x, t_stack], dim=1)
         return self.net(tx)
 
