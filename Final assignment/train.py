@@ -88,7 +88,12 @@ def get_lr_sched(step, total_steps, base_lr):
     progress = (step - WARMUP_STEPS) / (total_steps - WARMUP_STEPS)
     return (1.0 - progress) ** 0.9
 
-def distillation_loss(student_logits, teacher_logits, labels, T=2, alpha=0.5):
+def get_temperature (epoch, total_epochs, start_t = 3, final_t = 1):
+    T = start_t - (start_t-final_t)*(epoch/total_epochs)
+    return T
+    
+
+def distillation_loss(student_logits, teacher_logits, labels, T=1.0, alpha=0.7):
     # crossentropy
     soft_targets = F.softmax(teacher_logits/T, dim=1)
     log_probs = F.log_softmax(student_logits/T, dim=1)
@@ -225,6 +230,7 @@ def main(args):
     count_ep = 0 # counter for early stopping
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1:04}/{args.epochs:04}")
+        T = get_temperature (epoch, args.epochs)
 
         # Training
         student_model.train()
@@ -239,7 +245,7 @@ def main(args):
 
             optimizer.zero_grad()
             outputs = student_model(images)
-            loss = distillation_loss(outputs, teacher_outputs, labels)
+            loss = distillation_loss(outputs, teacher_outputs, labels, T=T)
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -313,7 +319,7 @@ def main(args):
                     output_dir, 
                     f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
                 )
-                torch.save(model.state_dict(), current_best_model_path)
+                torch.save(student_model.state_dict(), current_best_model_path)
 
             else:
                 count_ep+=1
@@ -324,7 +330,7 @@ def main(args):
 
     # Save the model
     torch.save(
-        model.state_dict(),
+        student_model.state_dict(),
         os.path.join(
             output_dir,
             f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"

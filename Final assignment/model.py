@@ -44,13 +44,14 @@ class StudentModel(nn.Module):
     def __init__(self, n_classes=19):
         super().__init__()
         # MobileNetV3 --> Efficiency benchmark
+	
         self.model = deeplabv3_mobilenet_v3_large(
             weights=None, 
-            num_classes=n_classes
-        )
+          num_classes=n_classes)
 
     def forward(self, x):
         return self.model(x)['out']
+
 
 class U_Net_Model(nn.Module):
     """ 
