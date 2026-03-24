@@ -26,7 +26,8 @@ RUN pip install --no-cache-dir \
     six \
     wandb \
     torchmetrics \
-    ptflops
+    ptflops \
+    transformers
 
 WORKDIR /app
 COPY predict.py /app/predict.py

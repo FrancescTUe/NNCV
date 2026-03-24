@@ -150,7 +150,7 @@ def main(args):
     # Define the transforms to apply to the data (training with data augmentation)
     img_transform = Compose([
     ToImage(),
-    Resize((224, 448)),
+    Resize((512, 1024)),
     ToDtype(torch.float32, scale=True),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -252,13 +252,13 @@ def main(args):
         with torch.no_grad():
             # we evaluate the cityscapes dataset
             for images, _ in valid_dataloader:
-                _, ood_score = ood_model(images.to(device), return_ood_score=True)
+                ood_score = ood_model(images.to(device))
                 cityscapes_scores.extend(ood_score.cpu().tolist())
 
             #we evaluate the COCO dataset
             for images, _ in ood_valid_dataloader:
-                    _, ood_score = ood_model(images.to(device), return_ood_score=True)
-                    coco_scores.extend(ood_score.cpu().tolist())
+                ood_score = ood_model(images.to(device))
+                coco_scores.extend(ood_score.cpu().tolist())
 
             separation_ratio = (sum(coco_scores) / len(coco_scores)) / (sum(cityscapes_scores) / len(cityscapes_scores))
             wandb.log({

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models.segmentation import deeplabv3_resnet50, deeplabv3_mobilenet_v3_large
+from transformers import SegformerModel
 
 class Model(nn.Module):
     def __init__(self, in_channels=3, n_classes=19, pretrained=False):
@@ -87,34 +88,35 @@ class VelocityNet(nn.Module):
 class FM_OODModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.encoder = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')        
+        self.encoder = SegformerModel.from_pretrained("nvidia/segformer-b0-finetuned-cityscapes-512-1024")      
         # we freeze the encoder  
         for param in self.encoder.parameters():
             param.requires_grad = False
             
-        self.flow_head = VelocityNet(input_dim=384) 
+        self.flow_head = VelocityNet(input_dim=256) 
 
-    def forward(self, x, return_ood_score=False):
+    def forward(self, x):
         # we obtain the features from the ViT
-        features = self.encoder(x)
+        outputs = self.encoder(x)
+        features = outputs.last_hidden_state
         latent = F.normalize(features, p=2, dim=1)
-        
+
         ood_score = self.compute_log_likelihood(latent)
         
         return ood_score
     
     def compute_log_likelihood(self, z, steps=5):
-            total_error = 0
-            for i in range(steps):
-                t = torch.rand(z.shape[0], 1, device=z.device)
-                x0 = torch.randn_like(z)
-                xt = (1-t)*x0 + t*z  # Probability path
-                target_v = z-x0
-                
-                pred_v = self.flow_head(t, xt)
-                total_error += torch.norm(pred_v-target_v, p=2, dim=1)
-                
-            return total_error / steps
+        total_error = 0
+        for i in range(steps):
+            t = torch.rand(z.shape[0], 1, device=z.device)
+            x0 = torch.randn_like(z)
+            xt = (1-t)*x0 + t*z  # Probability path
+            target_v = z-x0
+            
+            pred_v = self.flow_head(t, xt)
+            total_error += torch.norm(pred_v-target_v, p=2, dim=1)
+            
+        return total_error / steps
 
 
 class StudentModel(nn.Module):
