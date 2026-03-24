@@ -40,7 +40,12 @@ class Model(nn.Module):
 
     def forward(self, x, return_features=False):
         features = self.model.backbone(x)
-        x_features = self.model.classifier[0:4](features['out'])
+        x_in = features['out']
+        x_features = x_in
+        
+        for i in range(4):
+            x_features = self.model.classifier[i](x_features)
+
         logits = self.model.classifier[4](x_features)
         
         if return_features:
