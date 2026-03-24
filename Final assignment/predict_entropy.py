@@ -179,7 +179,6 @@ def main():
         cov = np.cov(all_features, rowvar=False)
         precision = np.linalg.inv(cov + 1e-6 * np.eye(cov.shape[0]))
 
-
         # we evaluate the cityscapes dataset
         for images, _ in valid_dataloader:
             images = images.to(device)
@@ -187,18 +186,18 @@ def main():
 
             # Compute entropy for the whole batch
             batch_entropies = compute_batch_entropy(outputs)
-            stats["ood_entropy"].extend(batch_entropies.cpu().tolist())
+            stats["id_entropy"].extend(batch_entropies.cpu().tolist())
             dists = compute_mahalanobis(features.cpu().numpy(), mean, precision)
-            stats["ood_dist"].extend(dists.tolist())
+            stats["id_dist"].extend(dists.tolist())
 
         for images, _ in ood_valid_dataloader:
             images = images.to(device)
             outputs, features = model(images, return_features=True)
 
             batch_entropies = compute_batch_entropy(outputs)
-            stats["id_entropy"].extend(batch_entropies.cpu().tolist())
+            stats["ood_entropy"].extend(batch_entropies.cpu().tolist())
             dists = compute_mahalanobis(features.cpu().numpy(), mean, precision)
-            stats["id_dist"].extend(dists.tolist())
+            stats["ood_dist"].extend(dists.tolist())
 
     np.savez(
         Path(OUTPUT_DIR) / "entropy_data.npz", 
