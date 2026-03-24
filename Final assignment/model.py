@@ -39,7 +39,6 @@ class Model(nn.Module):
         self.model.aux_classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
 
     def forward(self, x):
-        # DeepLabV3+ returns a dict with 'out' and 'aux'
         return self.model(x)['out']
 
 class TimeSinusoidal(nn.Module):
