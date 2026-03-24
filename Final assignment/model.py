@@ -42,6 +42,26 @@ class Model(nn.Module):
         # DeepLabV3+ returns a dict with 'out' and 'aux'
         return self.model(x)['out']
 
+class TimeSinusoidal(nn.Module):
+    def __init__(self, time_embed_dim=64):
+        super().__init__()
+        self.d_model = time_embed_dim
+
+    def forward(self, t):
+        device = t.device
+        t_scaled = t*1000 
+        # we compute the divergence term
+        div_term = torch.exp(
+            torch.arange(0, self.d_model, 2, device=device).float()*-(torch.log(10000.0)/self.d_model)
+        )
+        
+        # we apply the sin/cos to the continuous t
+        embeddings = torch.zeros((t.shape[0], self.d_model), device=device)
+        embeddings[:, 0::2] = torch.sin(t_scaled*div_term)
+        embeddings[:, 1::2] = torch.cos(t_scaled*div_term)
+        
+        return embeddings
+
 class ResidualBlock(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -65,8 +85,10 @@ class VelocityNet(nn.Module):
             nn.ReLU()
         )
         # Small MLP to embed the time scalar t into a higher-dimensional space
+        self.sin_time = TimeSinusoidal(time_embed_dim=time_embed_dim)
+
         self.time_embed = nn.Sequential(
-        nn.Linear(1, time_embed_dim),
+        nn.Linear(time_embed_dim, time_embed_dim),
         nn.SiLU(),                     # Activation function: Sigmoid Linear Unit
         nn.Linear(time_embed_dim, time_embed_dim)
         )
@@ -85,8 +107,8 @@ class VelocityNet(nn.Module):
             t = t.unsqueeze(1)
         if t.shape[0] != x.shape[0]:
             t = t.expand(x.shape[0], 1)
+        t_embed = self.time_embed(self.sin_time(t))
 
-        t_embed = self.time_embed(t)
         tx = torch.cat([x, t_embed], dim=1)
         x = self.input_proj(tx)
         x = self.res_blocks(x)
@@ -101,10 +123,17 @@ class FM_OODModel(nn.Module):
             param.requires_grad = False
             
         self.flow_head = VelocityNet(input_dim=256) 
+        #self.flow_head = VelocityNet(input_dim=480) 
 
     def forward(self, x):
         # we obtain the features from the ViT
-        outputs = self.encoder(x)
+        outputs = self.encoder(x, output_hidden_states=True)
+
+        #s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
+        #s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
+        #s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
+        #multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
+        
         features = outputs.last_hidden_state
         latent_vector = torch.mean(features, dim=[2,3])
         latent = F.normalize(latent_vector, p=2, dim=1)
@@ -115,8 +144,9 @@ class FM_OODModel(nn.Module):
     
     def compute_log_likelihood(self, z, steps=5):
         total_error = 0
-        for i in range(steps):
-            t = torch.rand(z.shape[0], 1, device=z.device)
+        t_steps = torch.linspace(0.1, 1.0, steps, device=z.device)
+        for t_val in t_steps:
+            t = torch.full((z.shape[0], 1), t_val, device=z.device)
             x0 = torch.randn_like(z)
             xt = (1-t)*x0 + t*z  # Probability path
             target_v = z-x0

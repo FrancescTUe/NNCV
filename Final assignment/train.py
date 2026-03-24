@@ -227,7 +227,13 @@ def main(args):
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
 
-            outputs = ood_model.encoder(images) 
+            outputs = ood_model.encoder(images, output_hidden_states=True) 
+
+            #s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
+            #s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
+            #s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
+            #multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
+
             features = outputs.last_hidden_state
 
             latent_vector = torch.mean(features, dim=[2,3])
