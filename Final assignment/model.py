@@ -52,7 +52,7 @@ class TimeSinusoidal(nn.Module):
         t_scaled = t*1000 
         # we compute the divergence term
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, device=device).float()*-(torch.log(10000.0)/self.d_model)
+            torch.arange(0, self.d_model, 2, device=device).float()*-(torch.log(torch.tensor(10000.0, device=device))/self.d_model)
         )
         
         # we apply the sin/cos to the continuous t
