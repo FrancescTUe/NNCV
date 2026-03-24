@@ -32,7 +32,7 @@ from model import Model
 # provide input data and expect output data.
 # Only for local testing, you can change these paths to point to your local data and output folders.
 IMAGE_DIR = "./data/cityscapes"
-OUTPUT_DIR = "/output"
+OUTPUT_DIR = "./output"
 MODEL_PATH = "model.pt"
 COCO_DIR = "./coco"
 
@@ -52,6 +52,12 @@ class ImageDataset(Dataset):
         if self.transform:
             img = self.transform(img)
         return img, 0  
+
+def compute_mahalanobis(features, mean, precision):
+    diff = features - mean
+    # Distance = sqrt( (z-mu)^T * Precision * (z-mu) )
+    dist = np.sqrt(np.sum(np.dot(diff, precision) * diff, axis=1))
+    return dist
 
 def compute_batch_entropy(pred: torch.Tensor) -> torch.Tensor:
     """
@@ -82,9 +88,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Running inference on: {device}")
 
-    entropy_stats = {
-            "cityscapes_val": [],
-            "coco_ood": []
+    stats = {
+            "id_entropy": [], "id_dist": [],
+            "ood_entropy": [], "ood_dist": []
         }
 
     # Load model
@@ -114,6 +120,15 @@ def main():
         ToDtype(torch.int64),  # no scaling
     ])
 
+    train_dataset = Cityscapes(
+        IMAGE_DIR,
+        split="train",
+        mode="fine",
+        target_type="semantic",
+        transform=img_transform,
+        target_transform=target_transform,
+        )
+
     valid_dataset = Cityscapes(
     IMAGE_DIR,
     split="val",
@@ -128,6 +143,14 @@ def main():
         root=os.path.join(COCO_DIR, "val2017"),
         transform=img_transform
     )
+
+    train_dataloader = DataLoader(
+        train_dataset, 
+        batch_size=64, 
+        shuffle=True,
+        num_workers=8
+    )
+
 
     valid_dataloader = DataLoader(
         valid_dataset, 
@@ -144,26 +167,45 @@ def main():
     )
 
     with torch.no_grad():
-        # we evaluate the cityscapes dataset
-        for images, _ in enumerate(valid_dataloader):
+        all_features = []
+        # we first compute the calibration for the mahalanobis distance
+        for images, _ in train_dataloader:
             images = images.to(device)
-            outputs = model(images)
+            _, features = model(images, return_features=True)
+            all_features.append(features.cpu().numpy())
+
+        all_features = np.concatenate(all_features, axis=0)
+        mean = np.mean(all_features, axis=0)
+        cov = np.cov(all_features, rowvar=False)
+        precision = np.linalg.inv(cov + 1e-6 * np.eye(cov.shape[0]))
+
+
+        # we evaluate the cityscapes dataset
+        for images, _ in valid_dataloader:
+            images = images.to(device)
+            outputs, features = model(images, return_features=True)
 
             # Compute entropy for the whole batch
             batch_entropies = compute_batch_entropy(outputs)
-            entropy_stats["cityscapes_val"].extend(batch_entropies.cpu().tolist())
-                                                   
+            stats["ood_entropy"].extend(batch_entropies.cpu().tolist())
+            dists = compute_mahalanobis(features.cpu().numpy(), mean, precision)
+            stats["ood_dist"].extend(dists.tolist())
+
         for images, _ in ood_valid_dataloader:
             images = images.to(device)
-            outputs = model(images)
+            outputs, features = model(images, return_features=True)
 
             batch_entropies = compute_batch_entropy(outputs)
-            entropy_stats["coco_ood"].extend(batch_entropies.cpu().tolist())
+            stats["id_entropy"].extend(batch_entropies.cpu().tolist())
+            dists = compute_mahalanobis(features.cpu().numpy(), mean, precision)
+            stats["id_dist"].extend(dists.tolist())
 
     np.savez(
         Path(OUTPUT_DIR) / "entropy_data.npz", 
-        cityscapes=entropy_stats["cityscapes_val"], 
-        coco=entropy_stats["coco_ood"]
+        id_entropy=np.array(stats["id_entropy"]),
+        id_dist=np.array(stats["id_dist"]),
+        ood_entropy=np.array(stats["ood_entropy"]),
+        ood_dist=np.array(stats["ood_dist"])
     )
 
 if __name__ == "__main__":

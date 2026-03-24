@@ -38,9 +38,17 @@ class Model(nn.Module):
         # Adjust the auxiliary classifier if needed
         self.model.aux_classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
 
-    def forward(self, x):
-        return self.model(x)['out']
-
+    def forward(self, x, return_features=False):
+        features = self.model.backbone(x)
+        x_features = self.model.classifier[0:4](features['out'])
+        logits = self.model.classifier[4](x_features)
+        
+        if return_features:
+            latent_vec = torch.mean(x_features, dim=(2, 3))
+            return logits, latent_vec
+        
+        return logits
+    
 class TimeSinusoidal(nn.Module):
     def __init__(self, time_embed_dim=64):
         super().__init__()
