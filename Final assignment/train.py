@@ -227,7 +227,9 @@ def main(args):
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
 
-            features = ood_model.encoder(images) 
+            outputs = ood_model.encoder(images) 
+            features = outputs.last_hidden_state
+
             latent_vector = torch.mean(features, dim=[2,3])
             latent = F.normalize(latent_vector, p=2, dim=1)
 
