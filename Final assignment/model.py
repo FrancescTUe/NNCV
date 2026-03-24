@@ -99,7 +99,8 @@ class FM_OODModel(nn.Module):
         # we obtain the features from the ViT
         outputs = self.encoder(x)
         features = outputs.last_hidden_state
-        latent = F.normalize(features, p=2, dim=1)
+        latent_vector = torch.mean(features, dim=[2,3])
+        latent = F.normalize(latent_vector, p=2, dim=1)
 
         ood_score = self.compute_log_likelihood(latent)
         

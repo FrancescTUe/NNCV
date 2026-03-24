@@ -228,7 +228,8 @@ def main(args):
             images, labels = images.to(device), labels.to(device)
 
             features = ood_model.encoder(images) 
-            latent = F.normalize(features, p=2, dim=1)
+            latent_vector = torch.mean(features, dim=[2,3])
+            latent = F.normalize(latent_vector, p=2, dim=1)
 
             optimizer.zero_grad()
             loss = flow_matching_loss(ood_model.flow_head, latent)
