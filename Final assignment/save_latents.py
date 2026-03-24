@@ -44,7 +44,7 @@ class ImageDataset(Dataset):
             img = self.transform(img)
         return img, 0 
     
-def save_latents(num_batches=20):
+def main(num_batches=20):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     img_transform = Compose([
@@ -117,3 +117,6 @@ def save_latents(num_batches=20):
     np.save(os.path.join(OUTPUT_DIR,"id_latents.npy"), np.concatenate(id_latents, axis=0))
     np.save(os.path.join(OUTPUT_DIR,"ood_latents.npy"), np.concatenate(ood_latents, axis=0))
     print("Done! Files saved.")
+
+if __name__ == "__main__":
+    main()
