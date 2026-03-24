@@ -56,15 +56,21 @@ class ResidualBlock(nn.Module):
         return x + self.block(x) # Skip connection
 
 class VelocityNet(nn.Module):
-    def __init__(self, input_dim=3072):
+    def __init__(self, input_dim=3072, time_embed_dim=64):
         super().__init__()
         # Initial projection
         self.input_proj = nn.Sequential(
-            nn.Linear(input_dim + 1, 1024),
+            nn.Linear(input_dim + time_embed_dim, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU()
         )
-        
+        # Small MLP to embed the time scalar t into a higher-dimensional space
+        self.time_embed = nn.Sequential(
+        nn.Linear(1, time_embed_dim),
+        nn.SiLU(),                     # Activation function: Sigmoid Linear Unit
+        nn.Linear(time_embed_dim, time_embed_dim)
+        )
+
         # Stacked residual blocks for deeper reasoning
         self.res_blocks = nn.Sequential(
             ResidualBlock(1024),
@@ -80,7 +86,8 @@ class VelocityNet(nn.Module):
         if t.shape[0] != x.shape[0]:
             t = t.expand(x.shape[0], 1)
 
-        tx = torch.cat([x, t], dim=1)
+        t_embed = self.time_embed(t)
+        tx = torch.cat([x, t_embed], dim=1)
         x = self.input_proj(tx)
         x = self.res_blocks(x)
         return self.output_proj(x)
