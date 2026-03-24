@@ -143,10 +143,6 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # we initialize more metrics
-    f1_metric = MulticlassF1Score(num_classes=19, average='macro', ignore_index=255).to(device)
-    miou_metric = MulticlassJaccardIndex(num_classes=19, ignore_index=255).to(device)
-
     # Define the transforms to apply to the data (training with data augmentation)
     img_transform = Compose([
     ToImage(),
@@ -237,10 +233,10 @@ def main(args):
             features = outputs.last_hidden_state
 
             latent_vector = torch.mean(features, dim=[2,3])
-            latent = F.normalize(latent_vector, p=2, dim=1)
+            #latent = F.normalize(latent_vector, p=2, dim=1)
 
             optimizer.zero_grad()
-            loss = flow_matching_loss(ood_model.flow_head, latent)
+            loss = flow_matching_loss(ood_model.flow_head, features)
             loss.backward()
             optimizer.step()
             #scheduler.step()

@@ -42,7 +42,7 @@ class Model(nn.Module):
         features = self.model.backbone(x)
         x_in = features['out']
         x_features = x_in
-        
+
         for i in range(4):
             x_features = self.model.classifier[i](x_features)
 
@@ -148,9 +148,9 @@ class FM_OODModel(nn.Module):
         
         features = outputs.last_hidden_state
         latent_vector = torch.mean(features, dim=[2,3])
-        latent = F.normalize(latent_vector, p=2, dim=1)
+        #latent = F.normalize(latent_vector, p=2, dim=1)
 
-        ood_score = self.compute_log_likelihood(latent)
+        ood_score = self.compute_log_likelihood(features)
         
         return ood_score
     

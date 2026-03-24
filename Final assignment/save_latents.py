@@ -1,0 +1,119 @@
+import os
+from argparse import ArgumentParser
+import numpy as np
+import wandb
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from PIL import Image
+from torch.optim import AdamW
+from torch.utils.data import DataLoader, Dataset
+from torchvision.datasets import Cityscapes
+from torchvision.utils import make_grid
+from torchvision.transforms.v2 import (
+    Compose,
+    Normalize,
+    Resize,
+    ToImage,
+    ToDtype,
+    InterpolationMode,
+)
+from ptflops import get_model_complexity_info
+
+from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
+from model import Model, FM_OODModel
+
+IMAGE_DIR = "./data/cityscapes"
+OUTPUT_DIR = "./output"
+COCO_DIR = "./coco"
+
+class ImageDataset(Dataset):
+    def __init__(self, root, transform=None):
+        self.root = root
+        self.transform = transform
+        # we list all image files
+        self.images = [f for f in os.listdir(root) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = os.path.join(self.root, self.images[index])
+        img = Image.open(img_path).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
+        return img, 0 
+    
+def save_latents(num_batches=20):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    img_transform = Compose([
+    ToImage(),
+    Resize((512, 1024)),
+    ToDtype(torch.float32, scale=True),
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    # Target transform (mask)
+    target_transform = Compose([
+        ToImage(),
+        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
+        ToDtype(torch.int64),  # no scaling
+    ])
+
+    valid_dataset = Cityscapes(
+    IMAGE_DIR,
+    split="val",
+    mode="fine",
+    target_type="semantic",
+    transform=img_transform,
+    target_transform=target_transform,
+    )
+
+    # COCO Validation (Far-OOD)
+    ood_valid_dataset = ImageDataset(
+        root=os.path.join(COCO_DIR, "val2017"),
+        transform=img_transform
+    )
+
+    valid_dataloader = DataLoader(
+        valid_dataset, 
+        batch_size=64, 
+        shuffle=False,
+        num_workers=8
+    )
+
+    ood_valid_dataloader = DataLoader(
+        ood_valid_dataset, 
+        batch_size=64, 
+        shuffle=False,
+        num_workers=8
+    )
+
+    ood_model = FM_OODModel().to(device)
+
+    id_latents = []
+    ood_latents = []
+    ood_model.eval()
+
+    with torch.no_grad():
+        print("Extracting ID latents...")
+        for i, (images, _) in enumerate(valid_dataloader):
+            if i >= num_batches: break
+            outputs = ood_model.encoder(images.to(device))
+            # GAP as per your model.py
+            latent = torch.mean(outputs.last_hidden_state, dim=[2, 3])
+            latent = F.normalize(latent, p=2, dim=1)
+            id_latents.append(latent.cpu().numpy())
+
+        print("Extracting OOD latents...")
+        for i, (images, _) in enumerate(ood_valid_dataloader):
+            if i >= num_batches: break
+            outputs = ood_model.encoder(images.to(device))
+            latent = torch.mean(outputs.last_hidden_state, dim=[2, 3])
+            latent = F.normalize(latent, p=2, dim=1)
+            ood_latents.append(latent.cpu().numpy())
+
+    np.save(os.path.join(OUTPUT_DIR,"id_latents.npy"), np.concatenate(id_latents, axis=0))
+    np.save(os.path.join(OUTPUT_DIR,"ood_latents.npy"), np.concatenate(ood_latents, axis=0))
+    print("Done! Files saved.")
