@@ -134,23 +134,25 @@ class FM_OODModel(nn.Module):
         for param in self.encoder.parameters():
             param.requires_grad = False
             
-        self.flow_head = VelocityNet(input_dim=256) 
-        #self.flow_head = VelocityNet(input_dim=480) 
+        #self.flow_head = VelocityNet(input_dim=256) 
+        self.flow_head = VelocityNet(input_dim=480) 
 
     def forward(self, x):
         # we obtain the features from the ViT
         outputs = self.encoder(x, output_hidden_states=True)
 
-        #s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
-        #s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
-        #s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
-        #multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
+        s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
+        s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
+        s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
+        multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
         
-        features = outputs.last_hidden_state
-        latent_vector = torch.mean(features, dim=[2,3])
+        #features = outputs.last_hidden_state
+        #latent_vector = torch.mean(features, dim=[2,3])
+        #ood_score = self.compute_log_likelihood(latent_vector)
+
         #latent = F.normalize(latent_vector, p=2, dim=1)
 
-        ood_score = self.compute_log_likelihood(latent_vector)
+        ood_score = self.compute_log_likelihood(multi_scale_latent)
         
         return ood_score
     

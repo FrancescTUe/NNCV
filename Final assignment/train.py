@@ -226,18 +226,21 @@ def main(args):
 
             outputs = ood_model.encoder(images, output_hidden_states=True) 
 
-            #s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
-            #s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
-            #s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
-            #multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
+            s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
+            s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
+            s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
+            multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
 
-            features = outputs.last_hidden_state
+            #features = outputs.last_hidden_state
 
-            latent_vector = torch.mean(features, dim=[2,3])
+            #latent_vector = torch.mean(features, dim=[2,3])
+
             #latent = F.normalize(latent_vector, p=2, dim=1)
 
             optimizer.zero_grad()
-            loss = flow_matching_loss(ood_model.flow_head, latent_vector)
+            #loss = flow_matching_loss(ood_model.flow_head, latent_vector)
+            loss = flow_matching_loss(ood_model.flow_head, multi_scale_latent)
+
             loss.backward()
             optimizer.step()
             scheduler.step()
