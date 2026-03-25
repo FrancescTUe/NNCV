@@ -261,15 +261,15 @@ def main(args):
                 cityscapes_scores.extend(ood_score.cpu().tolist())
 
             #we evaluate the COCO dataset
-            #for images, _ in ood_valid_dataloader:
-             #   ood_score = ood_model(images.to(device))
-              #  coco_scores.extend(ood_score.cpu().tolist())
-            for _ in range(len(ood_valid_dataloader)):
-                # Generate random noise with the same shape as the SegFormer features
-                noise_latent = torch.randn((args.batch_size, 256), device=device)
-               # noise_latent = F.normalize(noise_latent, p=2, dim=1)
-                ood_score = ood_model.compute_log_likelihood(noise_latent)
+            for images, _ in ood_valid_dataloader:
+                ood_score = ood_model(images.to(device))
                 coco_scores.extend(ood_score.cpu().tolist())
+            #for _ in range(len(ood_valid_dataloader)):
+                # Generate random noise with the same shape as the SegFormer features
+             #   noise_latent = torch.randn((args.batch_size, 256), device=device)
+               # noise_latent = F.normalize(noise_latent, p=2, dim=1)
+              #  ood_score = ood_model.compute_log_likelihood(noise_latent)
+               # coco_scores.extend(ood_score.cpu().tolist())
 
             separation_ratio = (sum(coco_scores) / len(coco_scores)) / (sum(cityscapes_scores) / len(cityscapes_scores))
             wandb.log({
