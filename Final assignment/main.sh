@@ -9,4 +9,4 @@ python3 train.py \
     --lr 0.0005 \
     --num-workers 10 \
     --seed 42 \
-    --experiment-id "OOD_v5" \
+    --experiment-id "OOD_v6" \
