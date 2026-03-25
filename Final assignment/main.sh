@@ -6,7 +6,7 @@ python3 train.py \
     --ood-data-dir ./coco \
     --batch-size 128 \
     --epochs 60 \
-    --lr 0.001 \
+    --lr 0.0005 \
     --num-workers 10 \
     --seed 42 \
-    --experiment-id "OOD_v4_DUMMY" \
+    --experiment-id "OOD_v5" \

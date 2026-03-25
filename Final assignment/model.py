@@ -150,7 +150,7 @@ class FM_OODModel(nn.Module):
         latent_vector = torch.mean(features, dim=[2,3])
         #latent = F.normalize(latent_vector, p=2, dim=1)
 
-        ood_score = self.compute_log_likelihood(features)
+        ood_score = self.compute_log_likelihood(latent_vector)
         
         return ood_score
     

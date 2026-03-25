@@ -236,7 +236,7 @@ def main(args):
             #latent = F.normalize(latent_vector, p=2, dim=1)
 
             optimizer.zero_grad()
-            loss = flow_matching_loss(ood_model.flow_head, features)
+            loss = flow_matching_loss(ood_model.flow_head, latent_vector)
             loss.backward()
             optimizer.step()
             #scheduler.step()
@@ -267,7 +267,7 @@ def main(args):
             for _ in range(len(ood_valid_dataloader)):
                 # Generate random noise with the same shape as the SegFormer features
                 noise_latent = torch.randn((args.batch_size, 256), device=device)
-                noise_latent = F.normalize(noise_latent, p=2, dim=1)
+               # noise_latent = F.normalize(noise_latent, p=2, dim=1)
                 ood_score = ood_model.compute_log_likelihood(noise_latent)
                 coco_scores.extend(ood_score.cpu().tolist())
 
