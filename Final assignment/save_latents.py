@@ -20,14 +20,14 @@ from torchvision.transforms.v2 import (
 )
 from ptflops import get_model_complexity_info
 
-from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex, MulticlassDice
+from torchmetrics.classification import MulticlassF1Score
 from model import Model, FM_OODModel
 
 IMAGE_DIR = "./data/cityscapes"
 OUTPUT_DIR = "./output"
 COCO_DIR = "./coco"
 MODEL_PATH = "ood_model.pt"
-SEG_MODEL_PATH = "model.pt"
+SEG_MODEL_PATH = "teacher_model.pt"
 
 id_to_trainid = {cls.id: cls.train_id for cls in Cityscapes.classes}
 def convert_to_train_id(label_img: torch.Tensor) -> torch.Tensor:
@@ -229,7 +229,7 @@ def main_2():
     cityscapes_dice_scores = []
     ood_model.eval()
 
-    dice_metric = MulticlassDice(num_classes=19, average=None).to(device)
+    dice_metric = MulticlassF1Score(num_classes=19, average='macro', multidim_average='global').to(device)
     with torch.no_grad():
         print("Saving scores for ID samples...")
         for i, (images, _) in enumerate(valid_dataloader):
