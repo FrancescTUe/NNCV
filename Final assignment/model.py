@@ -141,9 +141,9 @@ class FM_OODModel(nn.Module):
         # we obtain the features from the ViT
         outputs = self.encoder(x, output_hidden_states=True)
 
-        s2 = torch.mean(outputs.hidden_states[2], dim=[2, 3])
-        s3 = torch.mean(outputs.hidden_states[3], dim=[2, 3])
-        s4 = torch.mean(outputs.hidden_states[4], dim=[2, 3])
+        s2 = torch.mean(outputs.hidden_states[-3], dim=[2, 3])
+        s3 = torch.mean(outputs.hidden_states[-2], dim=[2, 3])
+        s4 = torch.mean(outputs.hidden_states[-1], dim=[2, 3])
         multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
         
         #features = outputs.last_hidden_state
