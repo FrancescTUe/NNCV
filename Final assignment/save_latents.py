@@ -20,13 +20,22 @@ from torchvision.transforms.v2 import (
 )
 from ptflops import get_model_complexity_info
 
-from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
+from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex, MulticlassDice
 from model import Model, FM_OODModel
 
 IMAGE_DIR = "./data/cityscapes"
 OUTPUT_DIR = "./output"
 COCO_DIR = "./coco"
 MODEL_PATH = "ood_model.pt"
+SEG_MODEL_PATH = "model.pt"
+
+id_to_trainid = {cls.id: cls.train_id for cls in Cityscapes.classes}
+def convert_to_train_id(label_img: torch.Tensor) -> torch.Tensor:
+    return label_img.apply_(lambda x: id_to_trainid[x])
+
+# Mapping train IDs to color
+train_id_to_color = {cls.train_id: cls.color for cls in Cityscapes.classes if cls.train_id != 255}
+train_id_to_color[255] = (0, 0, 0)  # Assign black to ignored labels
 
 class ImageDataset(Dataset):
     def __init__(self, root, transform=None):
@@ -58,7 +67,7 @@ def main(num_batches=20):
     # Target transform (mask)
     target_transform = Compose([
         ToImage(),
-        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
+        Resize((256, 512), interpolation=InterpolationMode.NEAREST),
         ToDtype(torch.int64),  # no scaling
     ])
 
@@ -129,12 +138,36 @@ def main_2():
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
+    img_transform_seg = Compose([
+    ToImage(),
+    Resize((256, 512)),
+    ToDtype(torch.float32, scale=True),
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
     # Target transform (mask)
     target_transform = Compose([
         ToImage(),
-        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
+        Resize((256, 512), interpolation=InterpolationMode.NEAREST),
         ToDtype(torch.int64),  # no scaling
     ])
+
+
+    valid_dataset_seg = Cityscapes(
+    IMAGE_DIR,
+    split="val",
+    mode="fine",
+    target_type="semantic",
+    transform=img_transform_seg,
+    target_transform=target_transform,
+    )
+
+    valid_dataloader_seg = DataLoader(
+        valid_dataset_seg, 
+        batch_size=64, 
+        shuffle=False,
+        num_workers=8
+    )
 
     valid_dataset = Cityscapes(
     IMAGE_DIR,
@@ -165,6 +198,19 @@ def main_2():
         num_workers=8
     )
 
+    model = Model(pretrained=False)
+    state_dict = torch.load(
+            SEG_MODEL_PATH, 
+            map_location=device,
+            weights_only=True,
+        )
+    model.load_state_dict(
+        state_dict, 
+        strict=True,  # Ensure the state dict matches the model architecture
+    )
+    model.eval().to(device)
+
+
     ood_model = FM_OODModel().to(device)
 
     state_dict = torch.load(
@@ -177,15 +223,31 @@ def main_2():
         strict=True,  # Ensure the state dict matches the model architecture
     )
     ood_model.eval().to(device)
+
     cityscapes_scores = []
     coco_scores = []
+    cityscapes_dice_scores = []
     ood_model.eval()
 
+    dice_metric = MulticlassDice(num_classes=19, average=None).to(device)
     with torch.no_grad():
         print("Saving scores for ID samples...")
         for i, (images, _) in enumerate(valid_dataloader):
             ood_score = ood_model(images.to(device))
             cityscapes_scores.extend(ood_score.cpu().tolist())
+
+        print("Computing segmentation DICE for ID samples...")
+        for i, (images, labels) in enumerate(valid_dataloader_seg):
+            labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+            images, labels = images.to(device), labels.to(device)
+
+            labels = labels.long().squeeze(1)  # Remove channel dimension
+
+            outputs = model(images)
+
+            predictions = outputs.softmax(1).argmax(1)
+            batch_dice = dice_metric(predictions, labels)
+            cityscapes_dice_scores.append(batch_dice.cpu().numpy())
 
         print("Saving scores for OOD samples...")
         for i, (images, _) in enumerate(ood_valid_dataloader):
@@ -194,7 +256,10 @@ def main_2():
 
     np.save(os.path.join(OUTPUT_DIR,"id_scores.npy"), np.array(cityscapes_scores))
     np.save(os.path.join(OUTPUT_DIR,"ood_scores.npy"), np.array(coco_scores))
+    np.save(os.path.join(OUTPUT_DIR, "id_dice_scores.npy"), np.array(cityscapes_dice_scores))
+    
     print("Done! Files saved.")
+
 
 if __name__ == "__main__":
     main_2()
