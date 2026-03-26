@@ -172,7 +172,7 @@ def main_2():
             map_location=device,
             weights_only=True,
         )
-    ood_model.load_state_dict(
+    ood_model.flow_head.load_state_dict(
         state_dict, 
         strict=True,  # Ensure the state dict matches the model architecture
     )
@@ -192,8 +192,8 @@ def main_2():
             ood_score = ood_model(images.to(device))
             coco_scores.extend(ood_score.cpu().tolist())
 
-    np.save(os.path.join(OUTPUT_DIR,"id_scores.npy"), np.concatenate(cityscapes_scores, axis=0))
-    np.save(os.path.join(OUTPUT_DIR,"ood_scores.npy"), np.concatenate(coco_scores, axis=0))
+    np.save(os.path.join(OUTPUT_DIR,"id_scores.npy"), np.array(cityscapes_scores))
+    np.save(os.path.join(OUTPUT_DIR,"ood_scores.npy"), np.array(coco_scores))
     print("Done! Files saved.")
 
 if __name__ == "__main__":
