@@ -116,7 +116,7 @@ def main():
     # Target transform (mask)
     target_transform = Compose([
         ToImage(),
-        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
+        Resize((256, 512), interpolation=InterpolationMode.NEAREST),
         ToDtype(torch.int64),  # no scaling
     ])
 

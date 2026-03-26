@@ -279,7 +279,7 @@ def main(args):
             wandb.log({
                 "avg_id_score": sum(cityscapes_scores) / len(cityscapes_scores),
                 "avg_ood_score": sum(coco_scores) / len(coco_scores),
-                "separation_ratio": separation_ratio
+                "separation_ratio":separation_ratio
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
             if separation_ratio > best_separation_ratio:

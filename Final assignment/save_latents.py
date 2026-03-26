@@ -26,6 +26,7 @@ from model import Model, FM_OODModel
 IMAGE_DIR = "./data/cityscapes"
 OUTPUT_DIR = "./output"
 COCO_DIR = "./coco"
+MODEL_PATH = "ood_model.pt"
 
 class ImageDataset(Dataset):
     def __init__(self, root, transform=None):
@@ -118,5 +119,82 @@ def main(num_batches=20):
     np.save(os.path.join(OUTPUT_DIR,"ood_latents.npy"), np.concatenate(ood_latents, axis=0))
     print("Done! Files saved.")
 
+def main_2():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    img_transform = Compose([
+    ToImage(),
+    Resize((512, 1024)),
+    ToDtype(torch.float32, scale=True),
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    # Target transform (mask)
+    target_transform = Compose([
+        ToImage(),
+        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
+        ToDtype(torch.int64),  # no scaling
+    ])
+
+    valid_dataset = Cityscapes(
+    IMAGE_DIR,
+    split="val",
+    mode="fine",
+    target_type="semantic",
+    transform=img_transform,
+    target_transform=target_transform,
+    )
+
+    # COCO Validation (Far-OOD)
+    ood_valid_dataset = ImageDataset(
+        root=os.path.join(COCO_DIR, "val2017"),
+        transform=img_transform
+    )
+
+    valid_dataloader = DataLoader(
+        valid_dataset, 
+        batch_size=64, 
+        shuffle=False,
+        num_workers=8
+    )
+
+    ood_valid_dataloader = DataLoader(
+        ood_valid_dataset, 
+        batch_size=64, 
+        shuffle=False,
+        num_workers=8
+    )
+
+    ood_model = FM_OODModel().to(device)
+
+    state_dict = torch.load(
+            MODEL_PATH, 
+            map_location=device,
+            weights_only=True,
+        )
+    ood_model.load_state_dict(
+        state_dict, 
+        strict=True,  # Ensure the state dict matches the model architecture
+    )
+    ood_model.eval().to(device)
+    cityscapes_scores = []
+    coco_scores = []
+    ood_model.eval()
+
+    with torch.no_grad():
+        print("Saving scores for ID samples...")
+        for i, (images, _) in enumerate(valid_dataloader):
+            ood_score = ood_model(images.to(device))
+            cityscapes_scores.extend(ood_score.cpu().tolist())
+
+        print("Saving scores for OOD samples...")
+        for i, (images, _) in enumerate(ood_valid_dataloader):
+            ood_score = ood_model(images.to(device))
+            coco_scores.extend(ood_score.cpu().tolist())
+
+    np.save(os.path.join(OUTPUT_DIR,"id_scores.npy"), np.concatenate(cityscapes_scores, axis=0))
+    np.save(os.path.join(OUTPUT_DIR,"ood_scores.npy"), np.concatenate(coco_scores, axis=0))
+    print("Done! Files saved.")
+
 if __name__ == "__main__":
-    main()
+    main_2()
