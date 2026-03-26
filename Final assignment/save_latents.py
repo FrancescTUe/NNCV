@@ -164,7 +164,7 @@ def main_2():
 
     valid_dataloader_seg = DataLoader(
         valid_dataset_seg, 
-        batch_size=64, 
+        batch_size=1, 
         shuffle=False,
         num_workers=8
     )
@@ -186,14 +186,14 @@ def main_2():
 
     valid_dataloader = DataLoader(
         valid_dataset, 
-        batch_size=64, 
+        batch_size=1, 
         shuffle=False,
         num_workers=8
     )
 
     ood_valid_dataloader = DataLoader(
         ood_valid_dataset, 
-        batch_size=64, 
+        batch_size=1, 
         shuffle=False,
         num_workers=8
     )
@@ -229,7 +229,7 @@ def main_2():
     cityscapes_dice_scores = []
     ood_model.eval()
 
-    dice_metric = MulticlassF1Score(num_classes=19, average='macro', multidim_average='global').to(device)
+    dice_metric = MulticlassF1Score(num_classes=19, average='macro', ignore_index=255).to(device)
     with torch.no_grad():
         print("Saving scores for ID samples...")
         for i, (images, _) in enumerate(valid_dataloader):
