@@ -35,7 +35,7 @@ class Model_Training(nn.Module):
 
         unfreeze_started = False
         for name, child in self.model.backbone.named_children():
-            if name == "layer3": 
+            if name == "layer4": 
                 unfreeze_started = True
             
             if unfreeze_started:

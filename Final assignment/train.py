@@ -162,6 +162,12 @@ def main(args):
         n_classes=19,  # 19 classes in the Cityscapes dataset
     ).to(device)
 
+    checkpoint = torch.load("seamseg_r50_vistas.tar", map_location='cpu')
+    actual_weights = checkpoint['state_dict']
+
+    # 3. Load those weights into your model
+    model.load_state_dict(actual_weights, strict=False)
+
     # Define the loss function (we add now class weights)
     cityscapes_weights = torch.tensor([
         2.81, 6.71, 3.78, 9.94, 9.77, 9.41, 10.27, 9.47, 2.88, 
