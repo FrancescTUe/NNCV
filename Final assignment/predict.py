@@ -71,7 +71,7 @@ def main():
     print(f"Running inference on: {device}")
 
     # Load model
-    model = Model(pretrained=False)
+    model = Model()
     state_dict = torch.load(
         MODEL_PATH, 
         map_location=device,
@@ -85,7 +85,6 @@ def main():
 
     image_files = list(Path(IMAGE_DIR).glob("*.png"))  # DO NOT CHANGE, IMAGES WILL BE PROVIDED IN THIS FORMAT
     print(f"Found {len(image_files)} images to process.")
-
 
     with torch.no_grad():
         for img_path in image_files:

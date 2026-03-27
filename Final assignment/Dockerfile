@@ -30,8 +30,8 @@ RUN pip install --no-cache-dir \
     transformers
 
 WORKDIR /app
-COPY predict.py /app/predict.py
 COPY model.py /app/model.py
-COPY model.pt /app/model.pt
+COPY predict.py /app/predict.py
+COPY teacher_model.pt /app/model.pt
 
 ENTRYPOINT ["python", "/app/predict.py"]

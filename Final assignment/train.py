@@ -18,10 +18,8 @@ from argparse import ArgumentParser
 import wandb
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from PIL import Image
 from torch.optim import AdamW
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes
 from torchvision.utils import make_grid
 from torchvision.transforms.v2 import (
@@ -31,11 +29,14 @@ from torchvision.transforms.v2 import (
     ToImage,
     ToDtype,
     InterpolationMode,
+    RandomResizedCrop,
+    RandomHorizontalFlip,
 )
-from ptflops import get_model_complexity_info
 
 from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
-from model import Model, FM_OODModel
+from torchvision import tv_tensors
+from torchvision.transforms import v2
+from model import Model_Training
 
 
 # Mapping class IDs to train IDs
@@ -59,28 +60,11 @@ def convert_train_id_to_color(prediction: torch.Tensor) -> torch.Tensor:
 
     return color_image
 
-class ImageDataset(Dataset):
-    def __init__(self, root, transform=None):
-        self.root = root
-        self.transform = transform
-        # we list all image files
-        self.images = [f for f in os.listdir(root) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, index):
-        img_path = os.path.join(self.root, self.images[index])
-        img = Image.open(img_path).convert('RGB')
-        if self.transform:
-            img = self.transform(img)
-        return img, 0  
-    
 def get_args_parser():
 
     parser = ArgumentParser("Training script for a PyTorch HRNet model")
     parser.add_argument("--data-dir", type=str, default="./data/cityscapes", help="Path to the training data")
-    parser.add_argument("--ood-data-dir", type=str, default="./coco", help="Path to COCO for OOD validation")
     parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
@@ -89,9 +73,6 @@ def get_args_parser():
     parser.add_argument("--experiment-id", type=str, default="HRNet_v1-training", help="Experiment ID for Weights & Biases")
 
     return parser
-
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 WARMUP_STEPS = 1000 
 def get_lr_sched(step, total_steps, base_lr):
@@ -102,25 +83,6 @@ def get_lr_sched(step, total_steps, base_lr):
     progress = (step - WARMUP_STEPS) / (total_steps - WARMUP_STEPS)
     return (1.0 - progress) ** 0.9
 
-def flow_matching_loss(flow_head, x1):
-    loss_fn = nn.MSELoss()
-    # x0 is normal noise 
-    x0 = torch.randn_like(x1)
-    
-    # we sample a random time t between 0 and 1
-    t = torch.rand(x1.shape[0], 1, device=x1.device)
-    
-    # linear interpolation: x_t = t*x1 + (1-t)*x0
-    xt = t*x1 + (1-t)*x0
-    
-    # we compute the target velocity
-    target_velocity = x1 - x0
-    
-    # we predict the velocity
-    predicted_velocity = flow_head(t, xt)
-    
-    # MSE Loss between velocities
-    return loss_fn(predicted_velocity, target_velocity)
 
 def main(args):
     # Initialize wandb for logging
@@ -143,6 +105,10 @@ def main(args):
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # we initialize more metrics
+    f1_metric = MulticlassF1Score(num_classes=19, average='macro', ignore_index=255).to(device)
+    miou_metric = MulticlassJaccardIndex(num_classes=19, ignore_index=255).to(device)
+
     # Define the transforms to apply to the data (training with data augmentation)
     img_transform = Compose([
     ToImage(),
@@ -154,7 +120,7 @@ def main(args):
     # Target transform (mask)
     target_transform = Compose([
         ToImage(),
-        Resize((224, 448), interpolation=InterpolationMode.NEAREST),
+        Resize((512, 1024), interpolation=InterpolationMode.NEAREST),
         ToDtype(torch.int64),  # no scaling
     ])
 
@@ -177,12 +143,6 @@ def main(args):
     target_transform=target_transform,
     )
 
-    # COCO Validation (Far-OOD)
-    ood_valid_dataset = ImageDataset(
-        root=os.path.join(args.ood_data_dir, "val2017"),
-        transform=img_transform
-    )
-
     train_dataloader = DataLoader(
         train_dataset, 
         batch_size=args.batch_size, 
@@ -196,51 +156,47 @@ def main(args):
         num_workers=args.num_workers
     )
 
-    ood_valid_dataloader = DataLoader(
-        ood_valid_dataset, 
-        batch_size=args.batch_size, 
-        shuffle=False,
-        num_workers=args.num_workers
-    )
+    # Define the model
+    model = Model_Training(
+        in_channels=3,  # RGB images
+        n_classes=19,  # 19 classes in the Cityscapes dataset
+    ).to(device)
 
-    ood_model = FM_OODModel().to(device)
+    # Define the loss function (we add now class weights)
+    cityscapes_weights = torch.tensor([
+        2.81, 6.71, 3.78, 9.94, 9.77, 9.41, 10.27, 9.47, 2.88, 
+        7.18, 3.85, 6.66, 9.59, 3.29, 9.55, 9.63, 9.63, 10.30, 9.55
+    ], dtype=torch.float32)
+    weights = cityscapes_weights.to(device)
+    #criterion = nn.CrossEntropyLoss(weight=weights,ignore_index=255)  # Ignore the void class
+    criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
-    optimizer = AdamW(filter(lambda p: p.requires_grad, ood_model.flow_head.parameters()),
-                       lr=args.lr, weight_decay=0.05)
-    
     total_steps = len(train_dataloader) * args.epochs
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+                       lr=args.lr, weight_decay=0.05)
+
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr))
 
     # Training loop
-    best_separation_ratio = 0
+    best_valid_loss = float('inf')
     current_best_model_path = None
     count_ep = 0 # counter for early stopping
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1:04}/{args.epochs:04}")
+
         # Training
-        ood_model.train()
+        model.train()
         for i, (images, labels) in enumerate(train_dataloader):
+
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
 
-            outputs = ood_model.encoder(images, output_hidden_states=True) 
-
-            s2 = torch.mean(outputs.hidden_states[-3], dim=[2, 3])
-            s3 = torch.mean(outputs.hidden_states[-2], dim=[2, 3])
-            s4 = torch.mean(outputs.hidden_states[-1], dim=[2, 3])
-            multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
-
-            #features = outputs.last_hidden_state
-
-            #latent_vector = torch.mean(features, dim=[2,3])
-
-            #latent = F.normalize(latent_vector, p=2, dim=1)
+            labels = labels.long().squeeze(1)  # Remove channel dimension
 
             optimizer.zero_grad()
-            #loss = flow_matching_loss(ood_model.flow_head, latent_vector)
-            loss = flow_matching_loss(ood_model.flow_head, multi_scale_latent)
-
+            outputs = model(images)
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -255,43 +211,66 @@ def main(args):
         wandb.log({"learning_rate": optimizer.param_groups[0]['lr']}, step=epoch)
 
         # Validation
-        ood_model.eval()
-        cityscapes_scores = []
-        coco_scores = []
+        model.eval()
+        f1_metric.reset()
+        miou_metric.reset()
         with torch.no_grad():
-            # we evaluate the cityscapes dataset
-            for images, _ in valid_dataloader:
-                ood_score = ood_model(images.to(device))
-                cityscapes_scores.extend(ood_score.cpu().tolist())
+            losses = []
+            for i, (images, labels) in enumerate(valid_dataloader):
 
-            #we evaluate the COCO dataset
-            for images, _ in ood_valid_dataloader:
-                ood_score = ood_model(images.to(device))
-                coco_scores.extend(ood_score.cpu().tolist())
-            #for _ in range(len(ood_valid_dataloader)):
-                # Generate random noise with the same shape as the SegFormer features
-             #   noise_latent = torch.randn((args.batch_size, 256), device=device)
-               # noise_latent = F.normalize(noise_latent, p=2, dim=1)
-              #  ood_score = ood_model.compute_log_likelihood(noise_latent)
-               # coco_scores.extend(ood_score.cpu().tolist())
+                labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
+                images, labels = images.to(device), labels.to(device)
 
-            separation_ratio = (sum(coco_scores) / len(coco_scores)) / (sum(cityscapes_scores) / len(cityscapes_scores))
+                labels = labels.long().squeeze(1)  # Remove channel dimension
+
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                losses.append(loss.item())
+
+                predictions = outputs.softmax(1).argmax(1)
+                f1_metric.update(predictions, labels)
+                miou_metric.update(predictions, labels)
+
+                if i == 0:
+                    #predictions = outputs.softmax(1).argmax(1)
+
+                    predictions = predictions.unsqueeze(1)
+                    labels = labels.unsqueeze(1)
+
+                    predictions = convert_train_id_to_color(predictions)
+                    labels = convert_train_id_to_color(labels)
+
+                    predictions_img = make_grid(predictions.cpu(), nrow=8)
+                    labels_img = make_grid(labels.cpu(), nrow=8)
+
+                    predictions_img = predictions_img.permute(1, 2, 0).numpy()
+                    labels_img = labels_img.permute(1, 2, 0).numpy()
+
+                    wandb.log({
+                        "predictions": [wandb.Image(predictions_img)],
+                        "labels": [wandb.Image(labels_img)],
+                    }, step=(epoch + 1) * len(train_dataloader) - 1)
+            
+            valid_loss = sum(losses) / len(losses)
+            total_f1 = f1_metric.compute()
+            total_miou = miou_metric.compute()
+
             wandb.log({
-                "avg_id_score": sum(cityscapes_scores) / len(cityscapes_scores),
-                "avg_ood_score": sum(coco_scores) / len(coco_scores),
-                "separation_ratio":separation_ratio
+                "valid_loss": valid_loss,
+                "val_f1": total_f1,
+                "val_mIoU": total_miou,
             }, step=(epoch + 1) * len(train_dataloader) - 1)
 
-            if separation_ratio > best_separation_ratio:
+            if valid_loss < best_valid_loss:
                 count_ep = 0
-                best_separation_ratio = separation_ratio
+                best_valid_loss = valid_loss
                 if current_best_model_path:
                     os.remove(current_best_model_path)
                 current_best_model_path = os.path.join(
                     output_dir, 
-                    f"best_model-epoch={epoch:04}-sep_rat={separation_ratio:04}.pt"
+                    f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
                 )
-                torch.save(ood_model.flow_head.state_dict(), current_best_model_path)
+                torch.save(model.state_dict(), current_best_model_path)
 
             else:
                 count_ep+=1
@@ -302,10 +281,10 @@ def main(args):
 
     # Save the model
     torch.save(
-        ood_model.flow_head.state_dict(),
+        model.state_dict(),
         os.path.join(
             output_dir,
-            f"final_model-epoch={epoch:04}-sep_rat={separation_ratio:04}.pt"
+            f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
         )
     )
     wandb.finish()

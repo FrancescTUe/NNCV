@@ -3,10 +3,10 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
 #SBATCH --gpus=1
-#SBATCH --partition=gpu_mig
+#SBATCH --partition=gpu_a100
 #SBATCH --time=12:00:00
 #SBATCH --reservation=terv92681
 
-#srun apptainer exec --nv --env-file .env container.sif /bin/bash main.sh
+srun apptainer exec --nv --env-file .env container.sif /bin/bash main.sh
 #srun apptainer exec --nv --env-file .env container.sif /bin/bash main_entropy.sh
-srun apptainer exec --nv --env-file .env container.sif /bin/bash main_latents.sh
+#srun apptainer exec --nv --env-file .env container.sif /bin/bash main_latents.sh
