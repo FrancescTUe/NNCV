@@ -177,7 +177,7 @@ def main(args):
     )
 
     # Load teacher model
-    teacher_model = Model(pretrained=False)
+    teacher_model = Model()
     state_dict = torch.load(
         'teacher_model.pt', 
         map_location=device,
