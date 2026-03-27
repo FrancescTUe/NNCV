@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision.models.segmentation import deeplabv3_resnet50, deeplabv3_mobilenet_v3_large
+from torchvision.models.segmentation import deeplabv3_resnet50
 
 class Model(nn.Module):
     def __init__(self, in_channels=3, n_classes=19):
@@ -19,18 +19,43 @@ class Model(nn.Module):
     def forward(self, x):
         return self.model(x)['out']
 
-class StudentModel(nn.Module):
-    def __init__(self, n_classes=19):
+class Model_Training(nn.Module):
+    def __init__(self, in_channels=3, n_classes=19, pretrained=False):
         super().__init__()
-        # MobileNetV3 --> Efficiency benchmark
-	
-        self.model = deeplabv3_mobilenet_v3_large(
-            weights=None, 
-          num_classes=n_classes)
+        # Load a pretrained DeepLabV3+ with a ResNet-50 backbone
+        weights = 'DEFAULT' if pretrained else None
+        self.model = deeplabv3_resnet50(
+            weights= weights,
+            progress=True,
+            aux_loss=True
+        )
+
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+        unfreeze_started = False
+        for name, child in self.model.backbone.named_children():
+            if name == "layer4": 
+                unfreeze_started = True
+            
+            if unfreeze_started:
+                for param in child.parameters():
+                    param.requires_grad = True
+
+
+        for param in self.model.classifier.parameters():
+            param.requires_grad = True
+        for param in self.model.aux_classifier.parameters():
+            param.requires_grad = True
+
+        # Adjust the classifier head for 19 classes
+        self.model.classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
+        # Adjust the auxiliary classifier if needed
+        self.model.aux_classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
 
     def forward(self, x):
+        # DeepLabV3+ returns a dict with 'out' and 'aux'
         return self.model(x)['out']
-
 
 class U_Net_Model(nn.Module):
     """ 

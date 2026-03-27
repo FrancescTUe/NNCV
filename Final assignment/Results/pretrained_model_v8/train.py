@@ -18,7 +18,6 @@ from argparse import ArgumentParser
 import wandb
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import Cityscapes
@@ -33,12 +32,11 @@ from torchvision.transforms.v2 import (
     RandomResizedCrop,
     RandomHorizontalFlip,
 )
-from ptflops import get_model_complexity_info
 
 from torchmetrics.classification import MulticlassF1Score, MulticlassJaccardIndex
 from torchvision import tv_tensors
 from torchvision.transforms import v2
-from model import Model, StudentModel
+from model import Model_Training
 
 
 # Mapping class IDs to train IDs
@@ -76,9 +74,6 @@ def get_args_parser():
 
     return parser
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 WARMUP_STEPS = 1000 
 def get_lr_sched(step, total_steps, base_lr):
     # Linear Warm-up
@@ -88,21 +83,6 @@ def get_lr_sched(step, total_steps, base_lr):
     progress = (step - WARMUP_STEPS) / (total_steps - WARMUP_STEPS)
     return (1.0 - progress) ** 0.9
 
-def get_temperature (epoch, total_epochs, start_t = 3, final_t = 1):
-    T = start_t - (start_t-final_t)*(epoch/total_epochs)
-    return T
-    
-
-def distillation_loss(student_logits, teacher_logits, labels, T=1.0, alpha=0.5):
-    # crossentropy
-    soft_targets = F.softmax(teacher_logits/T, dim=1)
-    log_probs = F.log_softmax(student_logits/T, dim=1)
-    # KL divergence 
-    kl_div = F.kl_div(log_probs, soft_targets, reduction='batchmean')*(T**2)
-    # combine loss
-    student_ce_loss = F.cross_entropy(student_logits, labels, ignore_index=255)
-    
-    return alpha*kl_div + (1-alpha)*student_ce_loss
 
 def main(args):
     # Initialize wandb for logging
@@ -176,27 +156,11 @@ def main(args):
         num_workers=args.num_workers
     )
 
-    # Load teacher model
-    teacher_model = Model(pretrained=False)
-    state_dict = torch.load(
-        'teacher_model.pt', 
-        map_location=device,
-        weights_only=True,
-    )
-    teacher_model.load_state_dict(
-        state_dict, 
-        strict=True,  # Ensure the state dict matches the model architecture
-    )
-
-    print(f"Teacher Parameters: {count_parameters(teacher_model):,}")
-
-    teacher_model.eval().to(device)
-
     # Define the model
-    student_model = StudentModel( 
+    model = Model_Training(
+        in_channels=3,  # RGB images
         n_classes=19,  # 19 classes in the Cityscapes dataset
-        ).to(device)
-    print(f"Student Parameters: {count_parameters(student_model):,}")
+    ).to(device)
 
     # Define the loss function (we add now class weights)
     cityscapes_weights = torch.tensor([
@@ -209,20 +173,10 @@ def main(args):
 
     # Define the optimizer
     total_steps = len(train_dataloader) * args.epochs
-    optimizer = AdamW(filter(lambda p: p.requires_grad, student_model.parameters()),
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
                        lr=args.lr, weight_decay=0.05)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr_sched(step, total_steps, args.lr))
-
-    #Compute FLOPs 
-    input_res = (3, 512, 1024)
-
-    with torch.cuda.device(0) if torch.cuda.is_available() else torch.cpu():
-        t_macs, t_params = get_model_complexity_info(teacher_model, input_res, as_strings=True, print_per_layer_stat=False)
-        s_macs, s_params = get_model_complexity_info(student_model, input_res, as_strings=True, print_per_layer_stat=False)
-
-    print(f"Teacher Complexity: {t_macs} MACs")
-    print(f"Student Complexity: {s_macs} MACs")
 
     # Training loop
     best_valid_loss = float('inf')
@@ -230,22 +184,19 @@ def main(args):
     count_ep = 0 # counter for early stopping
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1:04}/{args.epochs:04}")
-        T = get_temperature (epoch, args.epochs)
 
         # Training
-        student_model.train()
+        model.train()
         for i, (images, labels) in enumerate(train_dataloader):
 
             labels = convert_to_train_id(labels)  # Convert class IDs to train IDs
             images, labels = images.to(device), labels.to(device)
 
             labels = labels.long().squeeze(1)  # Remove channel dimension
-            with torch.no_grad():
-                teacher_outputs = teacher_model(images)
 
             optimizer.zero_grad()
-            outputs = student_model(images)
-            loss = distillation_loss(outputs, teacher_outputs, labels, T=T)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -260,7 +211,7 @@ def main(args):
         wandb.log({"learning_rate": optimizer.param_groups[0]['lr']}, step=epoch)
 
         # Validation
-        student_model.eval()
+        model.eval()
         f1_metric.reset()
         miou_metric.reset()
         with torch.no_grad():
@@ -272,7 +223,7 @@ def main(args):
 
                 labels = labels.long().squeeze(1)  # Remove channel dimension
 
-                outputs = student_model(images)
+                outputs = model(images)
                 loss = criterion(outputs, labels)
                 losses.append(loss.item())
 
@@ -319,7 +270,7 @@ def main(args):
                     output_dir, 
                     f"best_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
                 )
-                torch.save(student_model.state_dict(), current_best_model_path)
+                torch.save(model.state_dict(), current_best_model_path)
 
             else:
                 count_ep+=1
@@ -330,7 +281,7 @@ def main(args):
 
     # Save the model
     torch.save(
-        student_model.state_dict(),
+        model.state_dict(),
         os.path.join(
             output_dir,
             f"final_model-epoch={epoch:04}-val_loss={valid_loss:04}.pt"
