@@ -1,45 +1,85 @@
-# 5LSM0: Neural Networks for Computer Vision
+# Final Assignment: Cityscape Challenge  
 
-Welcome to the repository for **5LSM0: Neural Networks for Computer Vision**, a course offered by the Department of Electrical Engineering at Eindhoven University of Technology. This course is hosted by the [Architectures for Relaible Image Analysis Lab](https://github.com/TUE-ARIA).
+Welcome to the **Cityscape Challenge**, the final project for this course!  
 
-## Overview
+In this assignment, you'll put your knowledge of Neural Networks (NNs) for computer vision into action by tackling real-world problems using the **CityScapes dataset**. This dataset contains large-scale, high-quality images of urban environments, making it perfect for tasks like **semantic segmentation** and **object detection**.  
 
-This repository contains all the assignments and supplementary materials for the course. The weekly assignments are designed as **Jupyter Notebooks**, providing practical, hands-on experience with the concepts discussed during lectures. These notebooks will help you gain familiarity with implementing neural networks using **PyTorch** in **Python**. For the final assignment, you will apply the knowledge gained throughout the course by coding in native Python and working with a compute cluster, providing valuable experience in real-world computational environments.
+This challenge is designed to push your skills further, focusing on practical and often under-explored issues crucial for deploying computer vision models in real-world scenarios.  
 
-### Weekly Assignments
+---
 
-The weekly assignments are structured to guide you through foundational and advanced topics in neural networks for computer vision. These assignments are:
-- **Optional**: They are not mandatory but serve as valuable practice to build your coding skills.
-- **Hands-On**: Focused on applying theoretical knowledge from the lectures into real-world implementations.
+## Benchmarks  
 
-### Final Assignment
+The competition comprises four benchmarks, each targeting a specific aspect of model performance:  
 
-The **final assignment** is the cornerstone of this course and accounts for **50% of your final grade**. In this project, you will:
-1. Work on a real-world problem using the **CityScapes dataset**.
-2. Train neural networks and validate their performance against established baselines.
-3. Document your results and insights in a detailed report.
+1. **Peak performance**  
+   This benchmark evaluates your model's segmentation accuracy on a clean, standardized test set. Your goal is to achieve the highest segmentation scores here. **Everyone should submit a model to this benchmark optimized for maximum performance**. However, it's crucial to implement changes thoughtfully and be able to justify them in your research paper. Ultimately, the focus should be on the scientific contributions of your adaptations rather than solely aiming for the highest score.
 
-This final assignment requires a deeper dive into the subject, pushing you to apply the knowledge and skills gained throughout the course.
+The following benchmarks 2–4 are optional, and **you should select one** to compare against the Peak Performance benchmark. This allows you to analyze how your model performs under different conditions and gain deeper insights beyond just optimizing for the highest score.
 
-The final assignment will start in week 3 (February 24th), once all core lectures have been completed, ensuring you have the necessary foundation to work on the project.
+2. **Robustness**  
+   This benchmark tests how well your model performs under challenging conditions, such as changes in lighting, weather, or image quality. Consistency is key in this category.  
 
-## Authors and Contact
+3. **Efficiency**  
+   Practical applications often require compact models. This benchmark emphasizes creating smaller models that maintain acceptable performance. It’s particularly relevant for edge devices where large models are infeasible.  
 
-This course material is developed and maintained by the following contributors:  
+4. **Out-of-distribution detection**  
+   Models often encounter data that differs from the training distribution, leading to unreliable predictions. This benchmark evaluates your model's ability to detect and handle such out-of-distribution samples.  
 
-- **Cris H.B. Claessens**  
-  Email: [c.h.b.claessens@tue.nl](mailto:c.h.b.claessens@tue.nl)  
+> **IMPORTANT NOTE**: The **Peak Permomance** benchmark will also serve as the baseline server, and all participants must submit a baseline model here. This means that you can just train the already provided model in the repo. The training code for this model is also already provided. The baseline submission serves two purposes: ensuring that everyone is familiar with working on an HPC cluster and providing a reference point for evaluating the impact of different adaptations in your other benchmark submissions (you need to show these improvements compared to the baseline in your report!). The Baseline benchmark will close on **Tuesday, March 17, at 11:59 P.M. (GMT+1)**. To avoid last-minute issues, start preparing your submission early. This will also give you time to ask questions during the scheduled computer classes if needed.
 
-- **Tim J.M. Jaspers**  
-  Email: [t.j.m.jaspers@tue.nl](mailto:t.j.m.jaspers@tue.nl)
+---
 
-- **Francisco De Espírito Santo e Caetano**  
-  Email: [f.t.de.espirito.santo.e.caetano@tue.nl](mailto:f.t.de.espirito.santo.e.caetano@tue.nl)
+## Deliverables  
 
-- **Lemar Abdi**  
-  Email: [l.abdi@tue.nl](mailto:l.abdi@tue.nl)
+Your final submission will consist of the following:  
 
-- **dr. Christiaan G.A. Viviers**  
-  Email: [c.g.a.vivers@tue.nl](mailto:c.g.a.vivers@tue.nl)
+### 1. Research paper  
+Write a **3-4 page research paper** in [IEEE double-column format](https://www.overleaf.com/latex/templates/ieee-conference-template/grfzhhncsfqn), addressing (at least) the following:  
 
-If you have questions or need assistance, you can always reach out to us via email. However, we strongly encourage you to post your questions in the **Discussions** section of this GitHub repository. This way, other students can benefit from the conversations and contribute by helping each other out.
+- **Abstract**: Summarize the current problems, your key steps for addressing them and your main findings in about 100-300 words.
+- **Introduction**: Present the problem, challenges, and potential solutions based on existing literature.  
+- **Methods**: Describe your dataset(s), outline the baseline approach using an off-the-shelf segmentation model and define the enhancements you made for the specific benchmarks you participated.  
+- **Results**: Show and describe your results based on performance metrics and examples. Use figures and tables to support your findings. 
+- **Discussion**: Discuss the impact and potential of your main findings. Also discuss limitations and suggest future improvements.
+
+> **Submission**: Submit your paper as a PDF document via **Canvas**.
+
+The paper will be graded based on clarity, experimental design, insight, and originality.  
+
+### 2. Code repository  
+Push all relevant code to a **public GitHub repository** with a README.md file detailing:  
+- Required libraries and installation instructions.  
+- Steps to run your code.  
+- Your Codalab username and TU/e email address for correct mapping across systems.  
+
+### 3. Challenge platform submissions  
+The Cityscape Challenge will be hosted on a **dedicated course compute platform** (instead of Codalab used in previous years).
+
+You will receive clear, step-by-step instructions for making submission once the final assignment begins.
+
+---
+
+## Grading and Bonus Points  
+
+The final assignment accounts for **50% of your course grade**. Additionally, bonus points are available:  
+
+- **Top 3 in any benchmark**: +0.25 to your final assignment grade.  
+- **Best performance in any benchmark**: +0.5 to your final assignment grade.  
+
+For example, achieving the best performance in 'Peak Performance' and a top 3 spot in another benchmark will earn you a 0.75 bonus.  
+
+> **Note**: The bonus is optional. A great report with an innovative solution that doesn't rank highly can still earn a perfect score (10).  
+
+---
+
+## Important Notes  
+
+- Ensure a proper **train-validation split** of the CityScapes dataset.  
+- Training your model may take multiple hours; plan accordingly.  
+- Use ideas from literature but remember to **cite all sources**. Plagiarism will not be tolerated.  
+- For questions or challenges, use the **Discussions** section of this repository to collaborate with peers.  
+
+---
+
+We wish you the best of luck in this challenge and are excited to see the innovative solutions you develop! 🚀

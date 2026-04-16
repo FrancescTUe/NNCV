@@ -1,9 +1,0 @@
-data/
-*.sif
-*.out
-.env
-data/
-*.pt
-coco/
-model.pt
-*.tar
