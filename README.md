@@ -17,7 +17,7 @@ The repository is organized into distinct folders, each corresponding to a speci
 
 - `ood/`: Includes the scripts for binary anomaly detection. It contains the Flow Matching (FM) generative model and the predictive entropy baseline used to identify images outside the Cityscapes distribution.
 
-Each folder includes all necessary code for training, testing, and evaluation (including `train.py` and `predict.py` scripts) specific to that model.`
+Each folder includes all necessary code for training, testing, and evaluation (including `train.py` and `predict.py` scripts) specific to that model.
 
 
 ## Dataset Preparation
@@ -47,3 +47,12 @@ To ensure reproducibility and manage dependencies, every model folder includes a
    cd baseline_model
    docker build -t nncv-baseline .
 ```
+
+### Training and testing the models
+Each folder contains a `train.py` and `predict.py` scripts. Use the following steps to execute them within a container:
+1. **Build**
+```docker build -t nncv-[folder] .``` 
+2. **Train**
+```docker run --gpus all -v /path/to/data:/data nncv-[folder] python train.py```
+4. **Test**
+```docker run --gpus all -v /path/to/data:/data nncv-[folder] --checkpoint model.pt```
