@@ -79,6 +79,9 @@ class ResidualBlock(nn.Module):
         return x + self.block(x) # Skip connection
 
 class VelocityNet(nn.Module):
+    """
+    Model that implements is trained to predict the velocity field according to the Flow Matching formulation
+    """
     def __init__(self, input_dim=3072, time_embed_dim=64):
         super().__init__()
         # Initial projection
@@ -92,7 +95,7 @@ class VelocityNet(nn.Module):
 
         self.time_embed = nn.Sequential(
         nn.Linear(time_embed_dim, time_embed_dim),
-        nn.SiLU(),                     # Activation function: Sigmoid Linear Unit
+        nn.SiLU(), # Activation function: Sigmoid Linear Unit
         nn.Linear(time_embed_dim, time_embed_dim)
         )
 
@@ -118,6 +121,9 @@ class VelocityNet(nn.Module):
         return self.output_proj(x)
 
 class FM_OODModel(nn.Module):
+    """
+    Main class of FM model. It includes a pretrained encoder and a trainable head.
+    """
     def __init__(self, local_path="/app/segformer"):
         super().__init__()
         #self.encoder = SegformerModel.from_pretrained("nvidia/segformer-b0-finetuned-cityscapes-512-1024")      
@@ -142,18 +148,15 @@ class FM_OODModel(nn.Module):
         s3 = torch.mean(outputs.hidden_states[-2], dim=[2, 3])
         s4 = torch.mean(outputs.hidden_states[-1], dim=[2, 3])
         multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
-        
-        #features = outputs.last_hidden_state
-        #latent_vector = torch.mean(features, dim=[2,3])
-        #ood_score = self.compute_log_likelihood(latent_vector)
-
-        #latent = F.normalize(latent_vector, p=2, dim=1)
 
         ood_score = self.compute_log_likelihood(multi_scale_latent)
         
         return ood_score
     
     def compute_log_likelihood(self, z, steps=5):
+        """
+        We compute the anomaly score in three different time steps
+        """
         total_error = 0
         t_steps = torch.linspace(0.1, 1.0, steps, device=z.device)
         for t_val in t_steps:

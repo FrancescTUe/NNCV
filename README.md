@@ -1,85 +1,49 @@
-# Final Assignment: Cityscape Challenge  
+# Final Assignment: Beyond Peak Performance  
 
-Welcome to the **Cityscape Challenge**, the final project for this course!  
+## Semantic Segmentation for Autonomous Driving on Cityscapes
+This repository contains the full implementation for the final project of the Neural Networks for Computer Vision course. The project investigates semantic segmentation within urban environments, focusing on achieving a balance between high-accuracy models, deployable efficiency, and safety through Out-of-Distribution (OOD) detection.  
 
-In this assignment, you'll put your knowledge of Neural Networks (NNs) for computer vision into action by tackling real-world problems using the **CityScapes dataset**. This dataset contains large-scale, high-quality images of urban environments, making it perfect for tasks like **semantic segmentation** and **object detection**.  
 
-This challenge is designed to push your skills further, focusing on practical and often under-explored issues crucial for deploying computer vision models in real-world scenarios.  
 
----
+## Repository Structure  
 
-## Benchmarks  
+The repository is organized into distinct folders, each corresponding to a specific benchmark or model developed during the project:
 
-The competition comprises four benchmarks, each targeting a specific aspect of model performance:  
+- `baseline/`: Contains the U-Net architecture used as the initial performance baseline. This model operates on $256 \times 256$ resolution images.
 
-1. **Peak performance**  
-   This benchmark evaluates your model's segmentation accuracy on a clean, standardized test set. Your goal is to achieve the highest segmentation scores here. **Everyone should submit a model to this benchmark optimized for maximum performance**. However, it's crucial to implement changes thoughtfully and be able to justify them in your research paper. Ultimately, the focus should be on the scientific contributions of your adaptations rather than solely aiming for the highest score.
+- `peak/`: Contains the DeepLabV3+ model with a ResNet-50 backbone. This folder contains the code for achieving the highest segmentation accuracy using $1024 \times 512$ resolution and Atrous Spatial Pyramid Pooling (ASPP).
 
-The following benchmarks 2–4 are optional, and **you should select one** to compare against the Peak Performance benchmark. This allows you to analyze how your model performs under different conditions and gain deeper insights beyond just optimizing for the highest score.
+- `efficiency/`: Contains the MobileNetV3-Large implementation. It includes the Knowledge Distillation scripts used to train this lightweight "student" model from the "teacher" peak model.
 
-2. **Robustness**  
-   This benchmark tests how well your model performs under challenging conditions, such as changes in lighting, weather, or image quality. Consistency is key in this category.  
+- `ood/`: Includes the scripts for binary anomaly detection. It contains the Flow Matching (FM) generative model and the predictive entropy baseline used to identify images outside the Cityscapes distribution.
 
-3. **Efficiency**  
-   Practical applications often require compact models. This benchmark emphasizes creating smaller models that maintain acceptable performance. It’s particularly relevant for edge devices where large models are infeasible.  
+Each folder includes all necessary code for training, testing, and evaluation (including `train.py` and `predict.py` scripts) specific to that model.`
 
-4. **Out-of-distribution detection**  
-   Models often encounter data that differs from the training distribution, leading to unreliable predictions. This benchmark evaluates your model's ability to detect and handle such out-of-distribution samples.  
 
-> **IMPORTANT NOTE**: The **Peak Permomance** benchmark will also serve as the baseline server, and all participants must submit a baseline model here. This means that you can just train the already provided model in the repo. The training code for this model is also already provided. The baseline submission serves two purposes: ensuring that everyone is familiar with working on an HPC cluster and providing a reference point for evaluating the impact of different adaptations in your other benchmark submissions (you need to show these improvements compared to the baseline in your report!). The Baseline benchmark will close on **Tuesday, March 17, at 11:59 P.M. (GMT+1)**. To avoid last-minute issues, start preparing your submission early. This will also give you time to ask questions during the scheduled computer classes if needed.
+## Dataset Preparation
 
----
+The models are trained using the Cityscapes fine annotations split (2,975 training, 500 validation, and 1,525 test images). Follow the provided `download_docker_and_data.sh` script and `README-Installation.md` to fetch the Cityscapes data.
 
-## Deliverables  
+The OOD benchmark evaluates the system's ability to identify samples from the Common Objects in Context (COCO) dataset as anomalies.
+1. Download the 2017 Val images from the [official COCO website](https://cocodataset.org/#download).
+2. Unzip the images into your data directory:
+```bash
+   wget http://images.cocodataset.org/zips/val2017.zip
+   unzip val2017.zip -d ./data/coco
+```
 
-Your final submission will consist of the following:  
 
-### 1. Research paper  
-Write a **3-4 page research paper** in [IEEE double-column format](https://www.overleaf.com/latex/templates/ieee-conference-template/grfzhhncsfqn), addressing (at least) the following:  
+## Installation and Requirements 
+To ensure reproducibility and manage dependencies, every model folder includes a custom `Dockerfile`. This allows you to generate a consistent environment with all required libraries without manual installation.
 
-- **Abstract**: Summarize the current problems, your key steps for addressing them and your main findings in about 100-300 words.
-- **Introduction**: Present the problem, challenges, and potential solutions based on existing literature.  
-- **Methods**: Describe your dataset(s), outline the baseline approach using an off-the-shelf segmentation model and define the enhancements you made for the specific benchmarks you participated.  
-- **Results**: Show and describe your results based on performance metrics and examples. Use figures and tables to support your findings. 
-- **Discussion**: Discuss the impact and potential of your main findings. Also discuss limitations and suggest future improvements.
-
-> **Submission**: Submit your paper as a PDF document via **Canvas**.
-
-The paper will be graded based on clarity, experimental design, insight, and originality.  
-
-### 2. Code repository  
-Push all relevant code to a **public GitHub repository** with a README.md file detailing:  
-- Required libraries and installation instructions.  
-- Steps to run your code.  
-- Your Codalab username and TU/e email address for correct mapping across systems.  
-
-### 3. Challenge platform submissions  
-The Cityscape Challenge will be hosted on a **dedicated course compute platform** (instead of Codalab used in previous years).
-
-You will receive clear, step-by-step instructions for making submission once the final assignment begins.
-
----
-
-## Grading and Bonus Points  
-
-The final assignment accounts for **50% of your course grade**. Additionally, bonus points are available:  
-
-- **Top 3 in any benchmark**: +0.25 to your final assignment grade.  
-- **Best performance in any benchmark**: +0.5 to your final assignment grade.  
-
-For example, achieving the best performance in 'Peak Performance' and a top 3 spot in another benchmark will earn you a 0.75 bonus.  
-
-> **Note**: The bonus is optional. A great report with an innovative solution that doesn't rank highly can still earn a perfect score (10).  
-
----
-
-## Important Notes  
-
-- Ensure a proper **train-validation split** of the CityScapes dataset.  
-- Training your model may take multiple hours; plan accordingly.  
-- Use ideas from literature but remember to **cite all sources**. Plagiarism will not be tolerated.  
-- For questions or challenges, use the **Discussions** section of this repository to collaborate with peers.  
-
----
-
-We wish you the best of luck in this challenge and are excited to see the innovative solutions you develop! 🚀
+### Installation Steps
+1. **Clone the repository**
+```bash
+   git clone https://github.com/FrancescTUe/NNCV.git
+   cd NNCV
+```
+2. **Build the Docker Image by navigating to the desired model folder**
+```bash
+   cd baseline_model
+   docker build -t nncv-baseline .
+```

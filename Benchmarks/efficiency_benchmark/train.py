@@ -199,12 +199,6 @@ def main(args):
     print(f"Student Parameters: {count_parameters(student_model):,}")
 
     # Define the loss function (we add now class weights)
-    cityscapes_weights = torch.tensor([
-        2.81, 6.71, 3.78, 9.94, 9.77, 9.41, 10.27, 9.47, 2.88, 
-        7.18, 3.85, 6.66, 9.59, 3.29, 9.55, 9.63, 9.63, 10.30, 9.55
-    ], dtype=torch.float32)
-    weights = cityscapes_weights.to(device)
-    #criterion = nn.CrossEntropyLoss(weight=weights,ignore_index=255)  # Ignore the void class
     criterion = nn.CrossEntropyLoss(ignore_index=255)  # Ignore the void class
 
     # Define the optimizer
@@ -245,6 +239,7 @@ def main(args):
 
             optimizer.zero_grad()
             outputs = student_model(images)
+            # we use the distillation loss to train the model
             loss = distillation_loss(outputs, teacher_outputs, labels, T=T)
             loss.backward()
             optimizer.step()

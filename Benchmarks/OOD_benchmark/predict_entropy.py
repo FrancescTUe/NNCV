@@ -1,12 +1,3 @@
-"""
-This script provides and example implementation of a prediction pipeline 
-for a PyTorch U-Net model. It loads a pre-trained model, processes input 
-images, and saves the predicted segmentation masks. 
-
-You can use this file for submissions to the Challenge server. Customize 
-the `preprocess` and `postprocess` functions to fit your model's input 
-and output requirements.
-"""
 from pathlib import Path
 
 import torch

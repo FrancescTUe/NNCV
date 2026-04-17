@@ -24,6 +24,7 @@ class Model(nn.Module):
             aux_loss=True
         )
 
+        # Segmentor model --> peak-performance model
         self.segmentor.classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
         self.segmentor.aux_classifier[4] = nn.Conv2d(256, n_classes, kernel_size=1)
 
@@ -117,7 +118,7 @@ class VelocityNet(nn.Module):
 
         self.time_embed = nn.Sequential(
         nn.Linear(time_embed_dim, time_embed_dim),
-        nn.SiLU(),                     # Activation function: Sigmoid Linear Unit
+        nn.SiLU(),# Activation function: Sigmoid Linear Unit
         nn.Linear(time_embed_dim, time_embed_dim)
         )
 
@@ -156,7 +157,6 @@ class FM_OODModel(nn.Module):
         for param in self.encoder.parameters():
             param.requires_grad = False
             
-        #self.flow_head = VelocityNet(input_dim=256) 
         self.flow_head = VelocityNet(input_dim=480) 
 
     def forward(self, x):
@@ -167,12 +167,6 @@ class FM_OODModel(nn.Module):
         s3 = torch.mean(outputs.hidden_states[-2], dim=[2, 3])
         s4 = torch.mean(outputs.hidden_states[-1], dim=[2, 3])
         multi_scale_latent = torch.cat([s2, s3, s4], dim=1)
-        
-        #features = outputs.last_hidden_state
-        #latent_vector = torch.mean(features, dim=[2,3])
-        #ood_score = self.compute_log_likelihood(latent_vector)
-
-        #latent = F.normalize(latent_vector, p=2, dim=1)
 
         ood_score = self.compute_log_likelihood(multi_scale_latent)
         
